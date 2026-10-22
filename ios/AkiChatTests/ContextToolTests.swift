@@ -60,9 +60,13 @@ final class ContextTests: XCTestCase {
         let preset = PromptPreset(name: "test", text: "preset")
         settings.options.presets = [preset]; settings.options.presetIDs = [preset.id]
         var p = Provider.deepSeek; p.options.systemPrompt = "provider"
+        p.options.modelSystemPrompt = "model"
+        p.options.presetIDs = [preset.id]
         var c = Conversation(providerID: p.id); c.options.systemPrompt = "conversation"
         let text = PromptResolver.effective(provider: p, conversation: c, settings: settings)
         XCTAssertTrue(text.contains("app")); XCTAssertTrue(text.contains("preset")); XCTAssertTrue(text.contains("provider")); XCTAssertTrue(text.hasSuffix("conversation"))
+        XCTAssertTrue(text.range(of: "provider")!.lowerBound < text.range(of: "model")!.lowerBound)
+        XCTAssertTrue(text.range(of: "preset", options: .backwards)!.lowerBound < text.range(of: "model")!.lowerBound)
         c.options.systemPrompt = "updated"
         XCTAssertTrue(PromptResolver.effective(provider: p, conversation: c, settings: settings).hasSuffix("updated"))
         settings.options.promptEnabled = false

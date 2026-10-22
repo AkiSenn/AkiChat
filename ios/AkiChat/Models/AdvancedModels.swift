@@ -15,6 +15,8 @@ struct ProviderOptions: Codable, Equatable {
     var presetIDs: [UUID] = []
     var tokenLimitField: OutputTokenField?
     var sendSamplingParameters: Bool?
+    var modelSystemPrompt: String?
+    var modelPresetIDs: [UUID]?
 }
 extension Provider {
     var options: ProviderOptions {
@@ -67,8 +69,8 @@ struct ModelRecord: Codable, Identifiable, Equatable {
         options.supportsPrefix = overrides.prefix ?? discovered.prefix ?? false
         options.contextWindow = contextWindowOverride ?? contextWindow ?? base.options.contextWindow
         options.outputLimit = outputLimitOverride ?? outputLimit ?? base.options.outputLimit
-        options.systemPrompt += (options.systemPrompt.isEmpty || systemPrompt.isEmpty ? "" : "\n\n") + systemPrompt
-        options.presetIDs += presetIDs
+        options.modelSystemPrompt = systemPrompt
+        options.modelPresetIDs = presetIDs
         result.options = options
         return result
     }

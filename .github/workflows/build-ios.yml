@@ -103,6 +103,6 @@ jobs:
         run: |
           set -euo pipefail
           if ! gh release view "$TAG" > /dev/null 2>&1; then
-            gh release create "$TAG" --title "AkiChat $TAG" --generate-notes
+            gh release create "$TAG" --title "AkiChat $TAG" --notes-file docs/RELEASE_NOTES.md
           fi
           gh release upload "$TAG" build/AkiChat-iOS14-unsigned.ipa build/AkiChat-iOS14-adhoc.ipa build/SHA256SUMS.txt --clobber

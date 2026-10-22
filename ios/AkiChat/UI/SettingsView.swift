@@ -68,7 +68,7 @@ struct SettingsView: View {
                         Button("删除全部聊天记录") { deletion = .all }.foregroundColor(.red)
                     }
                     Card {
-                        Text("AkiChat 2.0").font(.headline)
+                        Text("AkiChat " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.0")).font(.headline)
                         Text("Created by AkiSenn\nBuilt with OpenAI Codex").font(.footnote)
                         Text("为 iPhone 与长久使用而写。独立原生实现，MIT License。无第三方运行时依赖。")
                             .font(.footnote).foregroundColor(.secondary)

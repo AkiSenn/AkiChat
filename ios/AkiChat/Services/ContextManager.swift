@@ -10,7 +10,8 @@ enum PromptResolver {
             return values.isEmpty ? "" : "[\(label)]\n" + values.joined(separator: "\n\n")
         }
         let layers = [layer("应用默认", text: settings.systemPrompt, ids: settings.options.presetIDs),
-                      layer("Provider / 模型", text: provider.options.systemPrompt, ids: provider.options.presetIDs),
+                      layer("Provider", text: provider.options.systemPrompt, ids: provider.options.presetIDs),
+                      layer("模型", text: provider.options.modelSystemPrompt ?? "", ids: provider.options.modelPresetIDs ?? []),
                       layer("会话", text: conversation.options.systemPrompt, ids: conversation.options.presetIDs)].filter { !$0.isEmpty }
         guard !layers.isEmpty else { return "" }
         return "以下按应用、Provider、模型、会话顺序合并；相同主题发生冲突时，后面的更具体配置优先。\n\n" + layers.joined(separator: "\n\n")

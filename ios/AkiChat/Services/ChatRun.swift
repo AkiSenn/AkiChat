@@ -144,6 +144,7 @@ enum SummaryService {
                          completion: @escaping (Result<SummaryVersion, Error>) -> Void) throws -> Cancellable {
         let input = try ContextManager.compressionInput(conversation: conversation, provider: provider)
         var p = provider; p.options.systemPrompt = ""; p.options.presetIDs = []
+        p.options.modelSystemPrompt = nil; p.options.modelPresetIDs = nil
         var c = Conversation(providerID: p.id); c.thinking = false
         c.options.context.inputBudget = p.options.contextWindow
         c.options.context.outputBudget = min(4096, p.options.outputLimit)

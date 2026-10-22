@@ -54,7 +54,7 @@ V2 Bundle ID 固定为 **com.akisenn.akichat**，V1 使用 `app.akichat.ios`。�
 | 压缩 | 75% 默认阈值（50%–90%），保留最近 8 轮完整对话，结构化摘要、覆盖范围、独立摘要模型、版本/回滚/额外 usage |
 | 提示词 | 应用→Provider→模型→会话，预设创建/编辑/复制/删除/启停/导入导出、按模型选择、有效提示词预览 |
 | Prefix Beta | 独立开关，DeepSeek /beta 与最后 assistant 的 prefix:true，本版与工具互斥 |
-| 数据 | SQLite 历史、搜索/重命名/确认删除、JSON/Markdown 导入导出、工具/来源/usage/摘要版本持久化，Keychain 单独保存密钥 |
+| 数据 | SQLite 历史、搜索/重命名/确认删除、JSON 导入导出、Markdown 导出、工具/来源/usage/摘要版本持久化，Keychain 单独保存密钥 |
 | Markdown | 流式逐步渲染，标题、列表、引用、粗斜体、行内代码、代码块/语言/复制、链接、基础表格 |
 
 轻量原生 Markdown 不宣称完整 CommonMark。JSON 是保真备份格式，Markdown 是便于阅读的导出。
@@ -132,7 +132,7 @@ Windows 可编辑和 Python 自检，不能运行 Xcode。新增 Swift 文件后
 
 工作流支持 push、workflow_dispatch、Tag push 与已发布 Release，使用 GitHub macos-15、固定 Xcode 16.4 和匹配 iOS 18.5 模拟器。先真机 arm64 Release 无签名编译，再检查 App、嵌入 Mach-O/Framework 的 arm64/iPhoneOS/最低系统，打包两种 IPA，执行 Mock 测试与截图，最后上传。模拟器测试宿主另用本地 ad-hoc 签名与最小普通 Keychain entitlement，解决无签名测试宿主缺少访问组的 -34018；CI 身份前缀不是 Apple 团队或账号，也不用于真机 Release。只在全部通过后发布 tag Release。失败日志与 xcresult 在 AkiChat-build-diagnostics。
 
-打包检查主程序、执行权限、Bundle ID、Info.plist、MinimumOSVersion 精确 14.0、Assets.car、无 provisioning、unsigned 确无签名、ZIP CRC 和 Payload/AkiChat.app；不接受模拟器、空文件或假 IPA。标签示例：`git tag v2.0.0 && git push origin v2.0.0`。具体已执行状态见 [Actions](https://github.com/AkiSenn/AkiChat/actions)。
+打包检查主程序、执行权限、Bundle ID、Info.plist、MinimumOSVersion 精确 14.0、Assets.car、无 provisioning、unsigned 确无签名、ZIP CRC 和 Payload/AkiChat.app；不接受模拟器、空文件或假 IPA。标签示例：`git tag v2.0.1 && git push origin v2.0.1`。具体已执行状态见 [Actions](https://github.com/AkiSenn/AkiChat/actions)。
 
 ## 测试与排查
 
