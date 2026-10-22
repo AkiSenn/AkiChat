@@ -157,7 +157,11 @@ final class AppStore: ObservableObject {
         if conversations.isEmpty { newConversation() }
         persist(immediate: true)
     }
-    func clearCurrent() { stop(); mutate { $0.messages = []; $0.draft = ""; $0.draftImages = [] }; persist(immediate: true) }
+    func clearCurrent() {
+        stop()
+        mutate { $0.messages = []; $0.draft = ""; $0.draftImages = []; $0.summaries = []; $0.activeSummaryID = nil; $0.updatedAt = Date() }
+        persist(immediate: true)
+    }
     func clearAll() { stop(); conversations = []; newConversation(); persist(immediate: true) }
     func addImage(_ image: Attachment) {
         guard draftImages.count < 4 else { notice = "每条消息最多添加 4 张图片"; return }

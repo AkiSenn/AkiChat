@@ -78,6 +78,9 @@ final class ContextTests: XCTestCase {
         let store = AppStore(database: db); store.rollbackSummary()
         XCTAssertEqual(store.current?.activeSummary?.text, "old"); XCTAssertEqual(store.current?.messages, c.messages)
         store.activateSummary(nil); XCTAssertNil(store.current?.activeSummary); XCTAssertEqual(store.current?.summaries?.count, 2)
+        store.clearCurrent()
+        XCTAssertTrue(store.current?.messages.isEmpty == true)
+        XCTAssertTrue(store.current?.summaries?.isEmpty == true); XCTAssertNil(store.current?.activeSummaryID)
     }
     func testPrefixUsesBetaAndSeparateAssistantFlag() throws {
         var c = history(0); c.options.prefixEnabled = true; c.options.assistantPrefix = "```swift\n"
