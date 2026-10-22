@@ -6,10 +6,15 @@ struct ConversationsView: View {
     @Environment(\.presentationMode) var presentation
     @State private var query = ""
     @State private var deleting: Conversation?
-    @State private var renaming: Conversation?
     @State private var title = ""
-    @State private var sharing: ShareFile?
+    @State private var sheet: ConversationSheet?
     @State private var importing = false
+    private enum ConversationSheet: Identifiable {
+        case rename(Conversation), share(ShareFile)
+        var id: UUID {
+            switch self { case .rename(let c): return c.id; case .share(let file): return file.id }
+        }
+    }
     var filtered: [Conversation] {
         store.conversations.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) ||
             $0.messages.contains { $0.content.localizedCaseInsensitiveContains(query) } }
@@ -38,7 +43,7 @@ struct ConversationsView: View {
                                 }
                             }
                         }.contextMenu {
-                            Button { title = c.title; renaming = c } label: { Label("重命名", systemImage: "pencil") }
+                            Button { title = c.title; sheet = .rename(c) } label: { Label("重命名", systemImage: "pencil") }
                             Button { export(c, json: true) } label: { Label("导出 JSON", systemImage: "square.and.arrow.up") }
                             Button { export(c, json: false) } label: { Label("导出 Markdown", systemImage: "doc.text") }
                             Button { deleting = c } label: { Label("删除", systemImage: "trash") }
@@ -56,16 +61,12 @@ struct ConversationsView: View {
                 Alert(title: Text("删除“\(c.title)”？"), message: Text("此操作无法撤销。"),
                     primaryButton: .destructive(Text("删除")) { store.deleteConversation(c.id) }, secondaryButton: .cancel(Text("取消")))
             }
-            .sheet(item: $renaming) { c in
-                NavigationView {
-                    VStack(spacing: 20) {
-                        TextField("会话名称", text: $title).textFieldStyle(RoundedBorderTextFieldStyle())
-                        Button("保存") { store.rename(c.id, title: title); renaming = nil }
-                        Spacer()
-                    }.padding().navigationTitle("重命名").navigationBarItems(trailing: Button("取消") { renaming = nil })
-                }.navigationViewStyle(StackNavigationViewStyle())
+            .sheet(item: $sheet) { destination in
+                switch destination {
+                case .rename(let c): renameEditor(c)
+                case .share(let file): ShareSheet(url: file.url)
+                }
             }
-            .sheet(item: $sharing) { ShareSheet(url: $0.url) }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
                 do {
                     let url = try result.get()
@@ -75,8 +76,17 @@ struct ConversationsView: View {
                 } catch { store.notice = error.localizedDescription }
             }
     }
+    private func renameEditor(_ c: Conversation) -> some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                TextField("会话名称", text: $title).textFieldStyle(RoundedBorderTextFieldStyle())
+                Button("保存") { store.rename(c.id, title: title); sheet = nil }
+                Spacer()
+            }.padding().navigationTitle("重命名").navigationBarItems(trailing: Button("取消") { sheet = nil })
+        }.navigationViewStyle(StackNavigationViewStyle())
+    }
     private func export(_ c: Conversation, json: Bool) {
-        do { sharing = try ShareFile.make(data: json ? ExportService.json([c]) : Data(ExportService.markdown(c).utf8), ext: json ? "json" : "md") }
+        do { sheet = .share(try ShareFile.make(data: json ? ExportService.json([c]) : Data(ExportService.markdown(c).utf8), ext: json ? "json" : "md")) }
         catch { store.notice = error.localizedDescription }
     }
 }

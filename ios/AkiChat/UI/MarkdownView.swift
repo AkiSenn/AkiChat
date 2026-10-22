@@ -129,6 +129,14 @@ private struct MeasuredText: UIViewRepresentable {
     let markdown: Bool
     let width: CGFloat
     @Binding var height: CGFloat
+    final class Coordinator {
+        var text = ""
+        var size: Double = 0
+        var bold = false
+        var markdown = false
+        var style: UIUserInterfaceStyle = .unspecified
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
         view.isEditable = false; view.isScrollEnabled = false; view.backgroundColor = .clear
@@ -138,10 +146,17 @@ private struct MeasuredText: UIViewRepresentable {
         return view
     }
     func updateUIView(_ view: UITextView, context: Context) {
-        let stamp = "\(size)-\(bold)-\(markdown)-\(view.traitCollection.userInterfaceStyle.rawValue)-\(text)"
-        if view.accessibilityIdentifier != stamp {
-            view.attributedText = InlineMarkdown.render(text, size: CGFloat(size), color: color, bold: bold, enabled: markdown)
-            view.accessibilityIdentifier = stamp
+        let cache = context.coordinator
+        let sameStyle = cache.size == size && cache.bold == bold && cache.markdown == markdown && cache.style == view.traitCollection.userInterfaceStyle
+        if cache.text != text || !sameStyle {
+            if !markdown && sameStyle && text.hasPrefix(cache.text) {
+                let suffix = String(text.dropFirst(cache.text.count))
+                view.textStorage.append(InlineMarkdown.render(suffix, size: CGFloat(size), color: color, bold: bold, enabled: false))
+            } else {
+                view.attributedText = InlineMarkdown.render(text, size: CGFloat(size), color: color, bold: bold, enabled: markdown)
+            }
+            cache.text = text; cache.size = size; cache.bold = bold; cache.markdown = markdown
+            cache.style = view.traitCollection.userInterfaceStyle
         }
         let measured = ceil(view.sizeThatFits(CGSize(width: max(1, width), height: .greatestFiniteMagnitude)).height)
         if abs(height - measured) > 0.5 { DispatchQueue.main.async { height = measured } }

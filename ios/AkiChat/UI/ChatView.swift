@@ -3,13 +3,21 @@ import UIKit
 
 struct ChatView: View {
     @EnvironmentObject var store: AppStore
-    @State private var showSessions = false
-    @State private var showSettings = false
-    @State private var showModels = false
-    @State private var showPhotos = false
+    @State private var sheet: ChatSheet?
     @State private var followLatest = true
-    @State private var editing: Message?
     @State private var editedText = ""
+    private enum ChatSheet: Identifiable {
+        case sessions, settings, models, photos, edit(Message)
+        var id: String {
+            switch self {
+            case .sessions: return "sessions"
+            case .settings: return "settings"
+            case .models: return "models"
+            case .photos: return "photos"
+            case .edit(let message): return message.id.uuidString
+            }
+        }
+    }
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -18,37 +26,41 @@ struct ChatView: View {
             composer
         }
         .background(Theme.background.edgesIgnoringSafeArea(.all))
-        .sheet(isPresented: $showSessions) { ConversationsView().environmentObject(store) }
-        .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
-        .sheet(isPresented: $showModels) { modelPicker }
-        .sheet(isPresented: $showPhotos) {
-            PhotoPicker { result in
-                switch result {
-                case .success(let image): store.addImage(image)
-                case .failure(let error): store.notice = error.localizedDescription
+        .sheet(item: $sheet) { destination in
+            switch destination {
+            case .sessions: ConversationsView().environmentObject(store)
+            case .settings: SettingsView().environmentObject(store)
+            case .models: modelPicker
+            case .photos:
+                PhotoPicker { result in
+                    switch result {
+                    case .success(let image): store.addImage(image)
+                    case .failure(let error): store.notice = error.localizedDescription
+                    }
                 }
+            case .edit(let message): editSheet(message)
             }
-        }
-        .sheet(item: $editing) { message in
-            NavigationView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("发送后将替换该消息及其后续回答。图片会保留。").font(.footnote).foregroundColor(.secondary)
-                    TextEditor(text: $editedText).padding(8).background(Theme.card).cornerRadius(12)
-                    Button("编辑并重新发送") {
-                        store.editAndResend(message.id, text: editedText); editing = nil
-                    }.disabled(editedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && message.images.isEmpty)
-                }.padding().navigationTitle("编辑消息")
-                .navigationBarItems(trailing: Button("取消") { editing = nil })
-            }.navigationViewStyle(StackNavigationViewStyle())
         }
         .alert(isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } })) {
             Alert(title: Text("AkiChat"), message: Text(store.notice ?? ""), dismissButton: .default(Text("好")))
         }
     }
+    private func editSheet(_ message: Message) -> some View {
+        NavigationView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("发送后将替换该消息及其后续回答。图片会保留。").font(.footnote).foregroundColor(.secondary)
+                    TextEditor(text: $editedText).padding(8).background(Theme.card).cornerRadius(12)
+                    Button("编辑并重新发送") {
+                        store.editAndResend(message.id, text: editedText); sheet = nil
+                    }.disabled(editedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && message.images.isEmpty)
+                }.padding().navigationTitle("编辑消息")
+                .navigationBarItems(trailing: Button("取消") { sheet = nil })
+            }.navigationViewStyle(StackNavigationViewStyle())
+    }
     private var header: some View {
         HStack(spacing: 12) {
-            IconButton(symbol: "line.horizontal.3", label: "会话列表") { showSessions = true }
-            Button { showModels = true } label: {
+            IconButton(symbol: "line.horizontal.3", label: "会话列表") { sheet = .sessions }
+            Button { sheet = .models } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(store.provider?.displayName ?? "选择模型").font(.system(size: 16, weight: .semibold)).lineLimit(1)
                     HStack(spacing: 4) {
@@ -72,7 +84,7 @@ struct ChatView: View {
                             MessageRow(message: message, fontSize: store.settings.fontSize,
                                 isActive: store.isGenerating && message.state == .generating,
                                 onRetry: { store.regenerate(from: message.id) },
-                                onEdit: { editedText = message.content; editing = message })
+                                onEdit: { editedText = message.content; sheet = .edit(message) })
                                 .equatable().id(message.id)
                         }
                         Color.clear.frame(height: 1).id("latest")
@@ -99,7 +111,7 @@ struct ChatView: View {
             Text("让想法，\n慢慢展开。").font(.system(size: 34, weight: .bold, design: .rounded))
             Text("写作、探索、理解。\n从一个问题开始，留下有价值的对话。")
                 .foregroundColor(.secondary).font(.system(size: 16)).lineSpacing(6)
-            Button { showSettings = true } label: {
+            Button { sheet = .settings } label: {
                 Label("配置你的 API", systemImage: "slider.horizontal.3").padding(14)
                     .background(Theme.card).cornerRadius(14)
             }
@@ -140,7 +152,7 @@ struct ChatView: View {
                 .disabled(!store.isGenerating && store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.draftImages.isEmpty)
             }
             HStack {
-                Button { showPhotos = true } label: { Image(systemName: "photo").frame(width: 36, height: 30) }
+                Button { sheet = .photos } label: { Image(systemName: "photo").frame(width: 36, height: 30) }
                     .disabled(store.isGenerating || store.provider?.supportsVision != true)
                     .accessibilityLabel("从相册添加图片")
                 if store.provider?.supportsThinking == true && store.provider?.kind == .deepSeek {
@@ -151,7 +163,7 @@ struct ChatView: View {
                     }.disabled(store.isGenerating)
                 }
                 Spacer()
-                Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3").frame(width: 36, height: 30) }.accessibilityLabel("设置")
+                Button { sheet = .settings } label: { Image(systemName: "slider.horizontal.3").frame(width: 36, height: 30) }.accessibilityLabel("设置")
             }.foregroundColor(Theme.accent)
         }.padding(14).background(Theme.card).cornerRadius(24)
             .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.primary.opacity(0.04)))
@@ -163,7 +175,7 @@ struct ChatView: View {
                 VStack(spacing: 12) {
                     ForEach(store.providers) { provider in
                         Button {
-                            store.selectProvider(provider.id); showModels = false
+                            store.selectProvider(provider.id); sheet = nil
                         } label: {
                             Card {
                                 HStack {
@@ -179,7 +191,7 @@ struct ChatView: View {
                     }
                 }.padding()
             }.background(Theme.background).navigationTitle("选择模型")
-                .navigationBarItems(trailing: Button("完成") { showModels = false })
+                .navigationBarItems(trailing: Button("完成") { sheet = nil })
         }.navigationViewStyle(StackNavigationViewStyle())
     }
 }
