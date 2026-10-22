@@ -1,0 +1,10 @@
+# iOS / local build outputs
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+*.ipa
+*.dSYM/
+__pycache__/
+*.pyc
