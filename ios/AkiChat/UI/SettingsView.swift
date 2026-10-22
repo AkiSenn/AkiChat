@@ -3,8 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.presentationMode) var presentation
-    @State private var clearConversation = false
-    @State private var clearAll = false
+    @State private var deletion: Deletion?
+    private enum Deletion: String, Identifiable { case conversation, all; var id: String { rawValue } }
     @State private var sharing: ShareFile?
     var body: some View {
         NavigationView {
@@ -56,8 +56,8 @@ struct SettingsView: View {
                             do { sharing = try ShareFile.make(data: ExportService.json(store.conversations), ext: "json") }
                             catch { store.notice = error.localizedDescription }
                         }
-                        Button("清空当前会话") { clearConversation = true }.foregroundColor(.red)
-                        Button("删除全部聊天记录") { clearAll = true }.foregroundColor(.red)
+                        Button("清空当前会话") { deletion = .conversation }.foregroundColor(.red)
+                        Button("删除全部聊天记录") { deletion = .all }.foregroundColor(.red)
                     }
                     Card {
                         Text("AkiChat 1.0").font(.headline)
@@ -70,8 +70,11 @@ struct SettingsView: View {
             }.background(Theme.background).navigationTitle("设置").navigationBarTitleDisplayMode(.inline)
                 .navigationBarItems(trailing: Button("完成") { presentation.wrappedValue.dismiss() })
         }.navigationViewStyle(StackNavigationViewStyle())
-            .alert(isPresented: $clearConversation) { Alert(title: Text("清空当前会话？"), message: Text("无法撤销。"), primaryButton: .destructive(Text("清空")) { store.clearCurrent() }, secondaryButton: .cancel(Text("取消"))) }
-            .alert(isPresented: $clearAll) { Alert(title: Text("删除全部聊天记录？"), message: Text("建议先导出备份。服务商和密钥会保留。"), primaryButton: .destructive(Text("删除")) { store.clearAll() }, secondaryButton: .cancel(Text("取消"))) }
+            .alert(item: $deletion) { kind in
+                Alert(title: Text(kind == .all ? "删除全部聊天记录？" : "清空当前会话？"), message: Text("无法撤销，建议先导出备份。"), primaryButton: .destructive(Text("删除")) {
+                    if kind == .all { store.clearAll() } else { store.clearCurrent() }
+                }, secondaryButton: .cancel(Text("取消")))
+            }
             .sheet(item: $sharing) { ShareSheet(url: $0.url) }
     }
     private func setting<T>(_ path: WritableKeyPath<AppSettings, T>) -> Binding<T> {

@@ -22,7 +22,7 @@ def generate():
         return "(" + ", ".join(items) + ",)" if items else "()"
     source_refs, test_refs, source_builds, test_builds, resources = [], [], [], [], []
     for folder, refs, builds in [("AkiChat", source_refs, source_builds), ("AkiChatTests", test_refs, test_builds)]:
-        for path in sorted((ROOT / folder).rglob("*.swift")):
+        for path in sorted((ROOT / folder).rglob("*.swift"), key=lambda p: p.relative_to(ROOT).as_posix()):
             name = path.relative_to(ROOT).as_posix()
             ref = obj("ref:" + name, f"isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {q(name)}; sourceTree = {q('<group>')};")
             refs.append(ref)

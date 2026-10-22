@@ -16,6 +16,7 @@ final class AppStore: ObservableObject {
     private var transport: ChatTransport?
     private var generationID: UUID?
     private var saveWork: DispatchWorkItem?
+    private var lastCheckpoint = Date.distantPast
     private var lifecycle: AnyCancellable?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     var current: Conversation? { conversations.first { $0.id == selectedID } }
@@ -133,6 +134,8 @@ final class AppStore: ObservableObject {
     private func beginGeneration() {
         let answer = Message(role: .assistant, content: "", state: .generating)
         mutate { $0.messages.append(answer) }
+        persist(immediate: true)
+        lastCheckpoint = Date()
         do {
             let request = try configuredRequest()
             let stream = settings.streaming && provider?.supportsStreaming == true
@@ -140,7 +143,10 @@ final class AppStore: ObservableObject {
             let transport = ChatTransport(); self.transport = transport
             transport.start(request: request, stream: stream, onUpdate: { [weak self] snapshot in
                 guard let self = self, self.generationID == token else { return }
-                self.updateAnswer(answer.id, snapshot: snapshot); self.persist()
+                self.updateAnswer(answer.id, snapshot: snapshot)
+                if Date().timeIntervalSince(self.lastCheckpoint) >= 2 {
+                    self.lastCheckpoint = Date(); self.persist(immediate: true)
+                }
             }, completion: { [weak self] result in
                 guard let self = self, self.generationID == token else { return }
                 switch result {
