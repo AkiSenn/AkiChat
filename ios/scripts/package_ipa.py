@@ -12,6 +12,26 @@ import zipfile
 def output(*args):
     return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT)
 
+def embedded_binaries(app):
+    binaries = []
+    for path in app.rglob("*"):
+        if not path.is_file() or path.name == "AkiChat":
+            continue
+        with path.open("rb") as f:
+            magic = f.read(4)
+        if magic in [b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca"]:
+            binaries.append(path)
+    return binaries
+
+def validate_embedded(app):
+    for binary in embedded_binaries(app):
+        assert "arm64" in output("lipo", "-archs", str(binary)).split(), f"Missing arm64: {binary}"
+        loads = output("otool", "-arch", "arm64", "-l", str(binary))
+        versions = re.findall(r"^\s*(?:minos|version)\s+(\d+\.\d+(?:\.\d+)?)\s*$", loads, re.M)
+        assert versions, f"Missing deployment metadata: {binary}"
+        assert all(tuple(map(int, v.split('.')))[:2] <= (14, 0) for v in versions), f"Embedded binary requires a newer OS: {binary}"
+        assert re.search(r"^\s*platform\s+2\s*$", loads, re.M) or "LC_VERSION_MIN_IPHONEOS" in loads, f"Non-iPhoneOS framework: {binary}"
+
 def validate_app(app):
     with (app / "Info.plist").open("rb") as f:
         info = plistlib.load(f)
@@ -29,6 +49,7 @@ def validate_app(app):
     assert (app / "Assets.car").is_file()
     assert not (app / "embedded.mobileprovision").exists()
     assert not info.get("NSAppTransportSecurity")
+    validate_embedded(app)
     return binary
 
 def main():
@@ -46,6 +67,9 @@ def main():
         binary = copied / "AkiChat"
         if args.adhoc:
             # Local ad-hoc only: no Apple account, certificate, provisioning, or private entitlements.
+            for embedded in embedded_binaries(copied):
+                target = embedded.parent if embedded.parent.suffix == ".framework" else embedded
+                output("codesign", "--force", "--sign", "-", str(target))
             output("codesign", "--force", "--sign", "-", "--identifier", "com.akisenn.akichat", str(copied))
             output("codesign", "--verify", "--strict", str(copied))
         else:

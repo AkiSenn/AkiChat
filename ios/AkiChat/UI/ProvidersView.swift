@@ -86,6 +86,12 @@ struct ProviderEditor: View {
                         Toggle("支持 Function Calling", isOn: $provider.options.supportsTools)
                         Toggle("支持 System Prompt", isOn: $provider.options.supportsSystem)
                         Toggle("支持 Prefix Beta", isOn: $provider.options.supportsPrefix)
+                        Picker("输出预算字段", selection: $provider.options.tokenLimitField) {
+                            Text("自动适配").tag(nil as OutputTokenField?)
+                            Text("max_tokens").tag(Optional(OutputTokenField.maxTokens))
+                            Text("max_completion_tokens").tag(Optional(OutputTokenField.maxCompletionTokens))
+                        }
+                        Toggle("发送采样参数", isOn: Binding(get: { provider.options.sendSamplingParameters ?? (URL(string: provider.baseURL)?.host != "api.openai.com") }, set: { provider.options.sendSamplingParameters = $0 }))
                         Stepper("超时：\(Int(provider.options.timeout)) 秒", value: $provider.options.timeout, in: 10...300, step: 10)
                         Stepper("上下文：\(provider.options.contextWindow) tokens", value: $provider.options.contextWindow, in: 4096...1048576, step: 4096)
                         Stepper("最大输出：\(provider.options.outputLimit) tokens", value: $provider.options.outputLimit, in: 256...131072, step: 256)

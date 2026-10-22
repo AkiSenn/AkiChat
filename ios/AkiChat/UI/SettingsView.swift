@@ -21,7 +21,7 @@ struct SettingsView: View {
                     }
                     Card {
                         NavigationLink("提示词预设与导入导出", destination: PromptLibraryView().environmentObject(store)).frame(minHeight: 44)
-                        NavigationLink("当前会话上下文、摘要与工具", destination: AdvancedConversationView().environmentObject(store)).frame(minHeight: 44)
+                        Text("聊天输入栏右侧按钮可打开当前会话控制台，配置预算、摘要与工具。").font(.caption).foregroundColor(.secondary)
                     }
                     Card {
                         Label("外观", systemImage: "circle.lefthalf.fill").font(.headline)
@@ -50,8 +50,10 @@ struct SettingsView: View {
                             Text(String(format: "Temperature %.2f", store.settings.temperature))
                             Slider(value: setting(\.temperature), in: 0...2, step: 0.05)
                         }
-                        Text(String(format: "Top P %.2f", store.settings.topP))
-                        Slider(value: setting(\.topP), in: 0.05...1, step: 0.05)
+                        if !(store.provider?.kind == .deepSeek && !store.thinking && store.provider?.modelID == "deepseek-flash") {
+                            Text(String(format: "Top P %.2f", store.settings.topP))
+                            Slider(value: setting(\.topP), in: 0.05...1, step: 0.05)
+                        }
                         Text("输出预算在会话控制台中设置；不同模型使用各自的能力上限。").font(.caption).foregroundColor(.secondary)
                         Text("DeepSeek 思考模式不发送 Temperature；Flash 思考模式 Top P 最低为 0.95。").font(.caption).foregroundColor(.secondary)
                     }

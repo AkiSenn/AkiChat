@@ -185,6 +185,7 @@ final class AppStore: ObservableObject {
         stop()
         guard let index = messages.firstIndex(where: { $0.id == id && $0.role == .user }) else { return }
         mutate {
+            if $0.activeSummary != nil { $0.activeSummaryID = nil }
             $0.messages[index].content = text
             $0.messages.removeSubrange((index + 1)..<$0.messages.count)
             $0.updatedAt = Date()
@@ -195,7 +196,11 @@ final class AppStore: ObservableObject {
         stop()
         guard let index = messages.firstIndex(where: { $0.id == id }),
               let userIndex = messages[...index].lastIndex(where: { $0.role == .user }) else { return }
-        mutate { $0.messages.removeSubrange((userIndex + 1)..<$0.messages.count) }
+        mutate { c in
+            let removed = Set(c.messages[(userIndex + 1)...].map(\.id))
+            if c.activeSummary?.coveredMessageIDs.contains(where: { removed.contains($0) }) == true { c.activeSummaryID = nil }
+            c.messages.removeSubrange((userIndex + 1)..<c.messages.count)
+        }
         beginGeneration()
     }
     private func beginGeneration() {

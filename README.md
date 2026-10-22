@@ -1,71 +1,123 @@
-# AkiChat
+# AkiChat V2
 
-原生 SwiftUI AI 对话客户端，最低 **iOS 14.0**。主要面向 iPhone XR（414×896 pt、iOS 14.8）和 TrollStore 安装场景。Swift 5、URLSessionDataDelegate、Core Data SQLite、Keychain，无服务器、无登录、无遥测、无第三方 Swift 包。
+原生 iOS 14+ 多模型 AI 客户端，主要面向 **iPhone XR / iOS 14.8 / A12**。Swift 5、SwiftUI/UIKit、URLSessionDataDelegate、Core Data SQLite、Keychain；无中转后端、无登录、无遥测、无第三方 Swift 运行时依赖。
 
-## 快速获得 IPA
+**Created by AkiSenn**<br>
+**Built with OpenAI Codex**
 
-1. 打开 [GitHub Actions](https://github.com/AkiSenn/akichat/actions/workflows/build-ios.yml)，选择 **Build iOS 14 IPA → Run workflow → Run workflow**。
-2. 等待整个任务变绿。真机 Release 编译、校验、模拟器单元测试全部通过后，才上传 `AkiChat-iOS14` 产物。
-3. 下载并解压 Artifact ZIP，得到 `AkiChat-iOS14-unsigned.ipa`、备用 `AkiChat-iOS14-adhoc.ipa`、SHA256 和模拟器启动截图。
-4. 将 IPA 传到 iPhone 的“文件”App，分享给已安装的 TrollStore，点击安装。打开 AkiChat，配置自己的密钥。
+Copyright (c) 2026 AkiSenn · [MIT](LICENSE) · [AUTHORS](AUTHORS.md) · [第三方说明](THIRD_PARTY_NOTICES.md)
 
-不要把外层 Artifact ZIP 当作 IPA。IPA 必须包含 `Payload/AkiChat.app`。不需要 Apple Developer 付费证书或 Provisioning Profile。
+## 下载与 TrollStore 安装
 
-## 当前功能
+稳定版本见 [GitHub Releases](https://github.com/AkiSenn/AkiChat/releases)。自行构建：打开 [Build iOS 14 IPA](https://github.com/AkiSenn/AkiChat/actions/workflows/build-ios.yml) → **Run workflow** → 等待绿色结果 → 下载 **AkiChat-iOS14** Artifact ZIP 并解压。
 
-- 多会话：新建、搜索标题/消息、最近排序、重命名、确认删除、清空、JSON 导入导出、Markdown 导出。
-- 聊天：自动增高输入框、复制、编辑重发、重新生成、停止生成、自动跟随和返回最新消息；草稿与图片随会话保存。
-- 模型：默认 DeepSeek、多配置/模型、每会话独立选择、手动模型 ID、HTTPS Base URL 规范化、非敏感自定义 Header、连接/密钥测试。
-- 流式/非流式：SSE 字节解析、拆分 UTF-8、跨数据块事件、多事件、`[DONE]`、独立思考/回答、Token usage、HTTP/超时/中断处理。
-- 深度思考：独立开关，low/high/max（默认 high），可折叠思考内容、状态及回答分区。
-- 图片：iOS 14 PHPicker 相册选择、预览/移除、ImageIO 解码时缩图、JPEG 压缩、Base64 data URL，发送失败可重新生成。
-- 原生 Markdown：标题、列表、引用、粗体、斜体、行内代码、代码块和复制、可点链接、基础表格。流式生成期间用原生纯文本降低渲染成本，结束后解析 Markdown。
-- 主题：自动/浅色/深色、字体大小、系统提示词、上下文消息数量、Temperature/Top P/输出长度、流式开关。
-- 数据：Keychain 密钥、Core Data SQLite 历史、系统文件保护；API 失败保留用户内容，进后台停止请求并保存。
+- `AkiChat-iOS14-unsigned.ipa`：实际 Release arm64 真机无签名构建。
+- `AkiChat-iOS14-adhoc.ipa`：同一构建的本地 ad-hoc 备用包，不需要开发者证书。
+- `SHA256SUMS.txt`：校验和；产物目录可执行 `shasum -a 256 -c SHA256SUMS.txt`。
+- `launch.png`：实际模拟器启动截图。
 
-基础 Markdown 采用独立轻量解析器，不宣称完整 CommonMark；数学公式、复杂嵌套表格、语法高亮、工具调用和后台持续生成不在本版范围。动画图片会转换为静态 JPEG。仅支持竖屏 iPhone。
+将 IPA 传到 iPhone“文件”App，分享给已安装的 TrollStore 并安装。外层 Artifact ZIP 不是 IPA。
 
-## API 配置
+三种步骤必须区分：**无签名编译**使用 CODE_SIGNING_ALLOWED=NO；**本地 ad-hoc**备用包使用 `codesign --sign -`，不是付费证书或永久签名；**TrollStore 安装处理**会按安装器机制重签/注册。不能承诺纯 unsigned IPA 不经安装处理就能运行。
 
-聊天页右下角“设置” → “模型与 API Key” → DeepSeek 或“添加 OpenAI 兼容服务商 / 模型”。填写名称、显示名称、Base URL、模型 ID、密钥与能力开关。
+先尝试 unsigned；若当前 TrollStore/ldid 拒绝未签名 Mach-O，使用随附 adhoc IPA，并检查 TrollStore 官方 ldid 是否已安装/更新。必要时可在 Mac 解压 unsigned IPA，执行 `ldid -S Payload/AkiChat.app/AkiChat`，再 `zip -r AkiChat-iOS14-fakesigned.ipa Payload`。ldid 应从官方可信来源获得，不添加任意私有 entitlement。
 
-默认 DeepSeek：
+官方依据：[TrollStore](https://github.com/opa334/TrollStore)。本项目不需要越狱注入、root helper、Apple 付费证书或 Provisioning Profile。
 
-| 字段 | 值 |
+### V1 数据迁移
+
+V2 Bundle ID 固定为 **com.akisenn.akichat**，V1 使用 `app.akichat.ios`。它们是独立 App/数据容器。先在 V1 导出全部聊天 JSON，再在 V2 会话抽屉中导入，并重新填写 API Key。没有跨容器自动迁移，也不卸载旧 App。完成备份前不要删除旧版。
+
+## 开始使用
+
+1. 空白聊天页“配置你的 API”，或左侧会话抽屉底部“应用设置” → “模型与 API Key”。
+2. 打开 DeepSeek，填写自己的密钥、测试并保存。保存新密钥后自动尝试 GET /models。
+3. 顶部模型选择器 → 模型库，刷新、搜索并选择 `deepseek-flash`；接口不可用时可手动添加模型 ID。
+4. 输入消息并开启深度思考。思考与回答分离，支持折叠、复制、编辑重发、重新生成和停止。
+5. 图片按钮可选择最多 4 张图片；输入栏右侧按钮打开“会话控制台”，配置图片、上下文、提示词、工具与搜索。
+6. 搜索或摘要前，先阅读并启用“同意外部搜索与额外摘要请求”。工具、联网与自动压缩默认关闭。
+7. 联网按钮切换关闭/自动/每条强制；来源列表和 Markdown 链接可打开原文。
+8. 长会话可自动或手动压缩，查看与恢复摘要版本。预算裁剪和压缩均不删除原始历史。
+
+## 功能
+
+| 模块 | 行为 |
 |---|---|
-| Provider | DeepSeek |
+| 原生 UI | 左侧会话抽屉、模型选择器、自动增高输入、键盘/安全区域、毛玻璃、卡片、浅色/深色/系统、动态字体与无障碍标签 |
+| Provider | DeepSeek、OpenAI 预设、自定义兼容接口，Chat/Models 路径、Header、超时、能力和预算上限 |
+| 模型库 | 自动/手动刷新、缓存与同步时间、搜索、收藏、排序、手动添加/删除、元数据与能力/容量覆盖 |
+| 网络 | 流式/非流式、UTF-8/SSE 分片、reasoning_content、tool_calls 增量、finish_reason、usage、超时/取消/错误/重试 |
+| 图片 | PHPicker 多图、预览/移除、512/1024/2048 最长边、JPEG 质量、解码时缩图、data URL、格式/大小限制 |
+| 工具 | 多轮 Function Calling，搜索、网页读取、日期时间、安全计算，白名单、参数校验、错误恢复、循环限制和折叠日志 |
+| 搜索 | 官方 DeepSeek Search/Fetch，自动/强制模式、默认 5 条（1–10 可调）、真实来源、状态/失败/费用提示 |
+| 上下文 | 每会话总预算/输出预留、自动/全量/滑动窗口/摘要+近期、完整轮次与工具链、Token 估算及实际 usage 校准 |
+| 压缩 | 75% 默认阈值（50%–90%），保留最近 8 轮完整对话，结构化摘要、覆盖范围、独立摘要模型、版本/回滚/额外 usage |
+| 提示词 | 应用→Provider→模型→会话，预设创建/编辑/复制/删除/启停/导入导出、按模型选择、有效提示词预览 |
+| Prefix Beta | 独立开关，DeepSeek /beta 与最后 assistant 的 prefix:true，本版与工具互斥 |
+| 数据 | SQLite 历史、搜索/重命名/确认删除、JSON/Markdown 导入导出、工具/来源/usage/摘要版本持久化，Keychain 单独保存密钥 |
+| Markdown | 流式逐步渲染，标题、列表、引用、粗斜体、行内代码、代码块/语言/复制、链接、基础表格 |
+
+轻量原生 Markdown 不宣称完整 CommonMark。JSON 是保真备份格式，Markdown 是便于阅读的导出。
+
+## API 与模型配置
+
+| DeepSeek 默认字段 | 值 |
+|---|---|
 | Base URL | `https://api.deepseek.com` |
-| 最终 Endpoint | `https://api.deepseek.com/chat/completions` |
-| API model | `deepseek-flash` |
-| 显示名称 | DeepSeek V4.1 Flash 1017 |
-| 适配方式 | DeepSeek 官方格式 |
-| 能力 | 图片、思考、流式 |
+| Chat / Models | `/chat/completions` / `/models` |
+| API model ID | `deepseek-flash` |
+| 初始显示名称 | DeepSeek V4.1 Flash 1017 |
+| 推理强度 | high，可选 low / high / max |
 
-**版本显示名不是 API 模型 ID。** 请勿把 `DeepSeek-V4.1-Flash-1017` 填入请求的 model。
+版本名称不是 API model ID。发现接口返回名称后优先展示服务端名称。支持根地址、/v1、完整 /v1/chat/completions 和手动端点路径，避免重复拼接。只接受无账号、查询参数和 fragment 的 HTTPS Base URL，保持系统 TLS 验证，拒绝重定向。
 
-点“测试连接和密钥”，看到成功后点“保存”。测试发送一条简短非流式消息，可能产生少量 API 费用。留空密钥保留已有值；“删除已保存密钥”明确移除 Keychain 记录。没有预置开发者密钥。
+模型发现读取 id、name、context_window、max_output_tokens、input/output_modalities、effort、api_capabilities。图片、思考、工具元数据缺失时保持未知/禁用，可核实后手动覆盖；官方 Flash 预设使用公开文档中的能力。刷新失败、空列表或远端缺失条目都不会删除本地配置。能力/容量覆盖、提示词、收藏和排序保留。
 
-自定义接口可填 `https://example.com/v1` 或 `https://example.com/v1/chat/completions/`，最终路径只拼接一次。只允许 HTTPS，保持系统 TLS 验证，拒绝重定向以避免认证信息转发。普通 OpenAI 兼容适配不会发送 DeepSeek 的 `thinking` 与 `reasoning_effort`。不依赖 `/models` 列表接口。
+并非所有兼容接口都实现 /models，404 时手动添加即可。Header 只用于非敏感元数据，不能存认证、Cookie 或 Key/Token/Secret。官方 OpenAI 预设自动选择 max_completion_tokens 并默认不发送可能被推理模型拒绝的采样参数；通用兼容接口默认 max_tokens，两项均可覆盖。非 DeepSeek 不发送其私有 thinking 参数。
 
-一个 Provider 配置代表一个模型；同一服务商可添加多个配置，每个配置拥有独立 Keychain 引用。自定义 Header 仅用于非敏感元数据（例如 `X-Client-Version`），不能放入密钥。认证统一使用 Keychain 中的 Bearer Key。
+## 思考、工具与联网
 
-### 思考、上下文与图片
+DeepSeek 开关使用 `{"thinking":{"type":"enabled"}}` 或 disabled，开启时传 reasoning_effort。思考模式不发送 Temperature，界面隐藏该无效参数。Flash 思考 Top P 最低 0.95，非思考 Flash 不发送无效 Top P。
 
-DeepSeek 开启思考时发送 `"thinking":{"type":"enabled"}`，关闭时发送 `"thinking":{"type":"disabled"}`；开启时携带 `reasoning_effort`。Temperature 在思考模式不发送，Flash 思考模式 Top P 下限为 0.95。
+普通多轮不回传历史 reasoning_content；携带 tools 时完整保留原始 assistant 的 reasoning_content、tool_calls 和匹配的 tool_call_id，包括没有调用工具的 assistant 回答。上下文按完整轮次和完整工具链处理，不能留下孤立 tool 消息。摘要覆盖旧轮次后发送摘要数据与近期原始轮次，近期推理字段仍完整保留。
 
-本版没有工具调用，历史 `reasoning_content` 仅用于本地显示与导出，**不会回传到普通多轮请求**；回答通过 content 回传。未来增加 tools 时必须另建上下文策略，遵循官方工具场景的推理回传规则。
+工具默认最多 4 轮、可设至 8 轮，每轮最多 4 个调用。纯数字计算使用独立解析器，不用任意代码执行或 NSExpression。未授权工具或非法参数返回错误；没有终端、任意代码、文件删除和私有数据访问。当前工具没有敏感写操作；未来敏感工具必须增加明确确认。
 
-图片内容为 `[{"type":"text","text":"…"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,…"}}]`，仅放在 user 消息。客户端每条消息最多 4 张、每张最多 4 MiB、最长边 2048 px；官方当前接受 JPEG/PNG/GIF/WebP，单图内联上限 32 MiB、请求体上限 48 MiB、每侧最多 8192 px（15 张及以上最多 4096 px）。客户端还校验上下文的总图片数量、总大小和编码后整个请求体。上下文过大时减小消息数量或开始新会话。
+搜索固定调用官方 `POST /v1/tools/search` 和 `POST /v1/tools/fetch`，复用用户选定的官方 DeepSeek 密钥。自动模式由真实 Function Calling 决定，强制模式先执行真实搜索再交给模型。失败会记录错误，不用提示词虚构联网。网页/搜索内容是有界不可信资料，不能提升权限或读取密钥；网页读取不访问设备本地网络。
 
-核对依据（2026-10-22）：[Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)、[Vision](https://api-docs.deepseek.com/guides/vision/)。API 未来变化时可在设置中修改模型 ID 或新增配置。
+## 上下文、压缩与提示词
 
-## iOS 14 与本地开发
+预算是输入加输出总量，并与模型元数据/手动上限取交集。Token 显示是估算（图片也计入），返回实际 prompt usage 时校准，不是精确 tokenizer 或账单。自动策略保留预算内最近完整轮次；全量超限明确报错；窗口保留最近 N 轮加当前问题；摘要策略使用活动版本和未覆盖原始轮次。
 
-打开 `ios/AkiChat.xcodeproj`，选择共享 Scheme **AkiChat**。所有 Debug/Release 和测试目标的 Deployment Target 固定为 **14.0**，Bundle ID 固定为 **com.akisenn.akichat**。建议 Xcode 16.4（CI 固定版本），Swift 编译模式为 5。
+自动压缩达到阈值且有超过保留轮数的旧历史才请求摘要。可指定独立 Provider/模型；大历史按摘要模型预算处理完整旧轮次，后续继续覆盖尚未摘要的部分。保存覆盖消息 ID、时间、模型及额外 usage。格式错误、请求失败或取消不替换旧版本。System Prompt 不被压缩覆盖；编辑旧消息会停用可能过时的活动摘要，版本历史仍保留。
 
-使用 iOS 14 可用的 `NavigationView`、`ScrollViewReader`、`LazyVStack`、PHPicker、UITextView、UIActivityViewController；不使用 NavigationStack、PhotosPicker、SwiftData、原生 SwiftUI Markdown、URLSession.bytes。SwiftUI 处理键盘安全区域，主界面仅背景延伸到屏幕边缘。
+关闭自动压缩切到窗口，可显式重选摘要策略。多层提示词按应用、Provider、模型、会话顺序合并，后级更具体配置优先；每次请求重新计算，关闭预设立即作用于下一次请求。Prefix 是独立的 assistant 输出前缀，不与 System Prompt 混用。
+
+## 隐私
+
+API Key 只在 Keychain（ThisDeviceOnly），不进入 UserDefaults、SQLite、导出或应用日志。临时 URLSession 无持久 Cookie/缓存，不绕过证书校验。普通聊天发往用户选择的模型服务商，不发往作者服务器。
+
+搜索将查询/URL 发送至 DeepSeek；额外摘要把历史发给当前或独立模型，可能产生费用，需在控制台同意后启用。导出含私密聊天、思考与图片，请自行选择目的地。导入只新增副本，不导入密钥、不覆盖旧会话；检查 80 MiB 限制、版本/重复 ID、实际图片格式/尺寸、消息/工具参数和上下文配置。数据库无法解码时暂停写入，保护原文件。
+
+## 工程与构建
+
+```text
+ios/AkiChat.xcodeproj/       完整工程与共享 Scheme
+ios/AkiChat/Models/          Codable、Provider、模型库、工具、来源、摘要、预设
+ios/AkiChat/API/             请求适配、SSE、delegate、模型发现、JSON HTTP
+ios/AkiChat/Services/        AppStore、ChatRun、ContextManager、SummaryService、工具/搜索、图片
+ios/AkiChat/Storage/         Core Data SQLite、Keychain
+ios/AkiChat/UI/              聊天、抽屉、模型库、控制台、预设、原生 Markdown/UIKit
+ios/AkiChatTests/            Mock URLProtocol、脚本化多轮测试、XCTest
+ios/scripts/                工程生成、兼容性、实际 App/Framework/IPA 校验
+.github/workflows/          构建、测试、Artifact、Tag Release
+docs/                       真机验收矩阵、后续 TODO
+```
+
+Xcode 16.4 打开工程；Swift 5、Deployment Target 固定 14.0，Bundle ID 固定 com.akisenn.akichat。使用 NavigationView、PHPicker、UITextView、UIVisualEffectView，不使用 NavigationStack、SwiftData、PhotosPicker、URLSession.bytes 或 SwiftUI 原生 Markdown。无第三方 Markdown 包。
 
 ```sh
+python3 ios/scripts/generate_project.py
 python3 ios/scripts/check_compatibility.py
 xcodebuild -project ios/AkiChat.xcodeproj -scheme AkiChat \
   -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
@@ -76,75 +128,36 @@ python3 ios/scripts/package_ipa.py \
   build/AkiChat-iOS14-unsigned.ipa
 ```
 
-Windows 可以编辑完整源码和运行 Python 工程自检，但不能执行 Xcode 编译。添加 Swift 文件后运行 `python3 ios/scripts/generate_project.py` 并提交更新后的工程。已提交的工程不依赖 XcodeGen。图标已提交，只有重新生成图标才需要 Pillow：`python3 ios/scripts/generate_icons.py`。
+Windows 可编辑和 Python 自检，不能运行 Xcode。新增 Swift 文件后重新生成并提交工程。图标已提交，仅重生成需要开发工具 Pillow。
 
-## 项目结构
+工作流支持 push、workflow_dispatch、Tag push 与已发布 Release，使用 GitHub macos-15、固定 Xcode 16.4 和匹配 iOS 18.5 模拟器。先真机 arm64 Release 无签名编译，再检查 App、嵌入 Mach-O/Framework 的 arm64/iPhoneOS/最低系统，打包两种 IPA，执行 Mock 测试与截图，最后上传。模拟器测试宿主另用本地 ad-hoc 签名与最小普通 Keychain entitlement，解决无签名测试宿主缺少访问组的 -34018；CI 身份前缀不是 Apple 团队或账号，也不用于真机 Release。只在全部通过后发布 tag Release。失败日志与 xcresult 在 AkiChat-build-diagnostics。
 
-```text
-ios/AkiChat.xcodeproj/       完整工程及共享 Scheme
-ios/AkiChat/
-  AkiChatApp.swift            SwiftUI 应用入口
-  Models/                    Codable 模型、导入导出、错误
-  UI/                        聊天、会话、设置、Provider、原生 Markdown
-  API/                       Provider 适配、请求、SSE、URLSessionDataDelegate
-  Storage/                   Core Data SQLite、Keychain
-  Services/                  主线程状态、图片处理、异步持久化
-  Assets.xcassets/            原创应用图标
-ios/AkiChatTests/            无真实密钥的 XCTest / Mock URLProtocol
-ios/scripts/                工程生成、兼容性回归检查、真实产物校验/打包
-.github/workflows/          真机编译、测试、Artifacts、tag Release
-```
+打包检查主程序、执行权限、Bundle ID、Info.plist、MinimumOSVersion 精确 14.0、Assets.car、无 provisioning、unsigned 确无签名、ZIP CRC 和 Payload/AkiChat.app；不接受模拟器、空文件或假 IPA。标签示例：`git tag v2.0.0 && git push origin v2.0.0`。具体已执行状态见 [Actions](https://github.com/AkiSenn/AkiChat/actions)。
 
-Core Data 保存版本化 Codable 记录。密钥不进入数据库、UserDefaults、JSON、Markdown 或日志。数据库无法解码时暂停写入，不用空记录覆盖原文件。导出含聊天文本、思考和图片，使用系统分享界面交给用户选择目的地；导入将聊天作为新副本加入，不覆盖已有聊天、不导入认证配置。
+## 测试与排查
 
-## Actions 与 Release
+Mock 测试覆盖请求/路径、模型列表及 HTTP 错误、能力、SSE 每字节分片、reasoning/tool_calls、Function Calling 多轮、Search/Fetch、权限、计算、预算/阈值/工具链、摘要失败/回滚、提示词、Prefix、图片、SQLite、Keychain、导出与 iOS 14 元数据。源码静态检查与 SDK availability 编译检查共同使用。
 
-工作流支持任意 push（包括 tag）、workflow_dispatch 和已发布 GitHub Release。使用 GitHub `macos-15` Runner 和预装 `/Applications/Xcode_16.4.app`，该组合来自 [Runner 官方镜像清单](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md)。固定版本不存在时直接失败，避免静默更换工具链。
-
-流程：源码/工程自检 → 真机 arm64 Release 无签名编译 → 校验真实 `.app` → 两种 IPA → iOS 18.5 模拟器 Mock 测试和启动截图 → 上传产物。自动测试使用较新模拟器，编译目标仍是 14.0；这不能代替 iOS 14.8 真机验收。
-
-打包器检查实际可执行文件大小、执行权限、Mach-O arm64、最低系统 14.0、iPhoneOS 平台、Info.plist、Assets.car、无 provisioning、原始包确实未签名、ZIP CRC 和 `Payload/AkiChat.app` 结构。任何检查失败即停止。仅成功构建和测试后才发布用户下载产物，失败日志在诊断 Artifact 中。
-
-发布示例：`git tag v1.0.0 && git push origin v1.0.0`，工作流将创建 GitHub Release 并附加 IPA 与校验和；已存在 Release 时更新附件。普通分支 push 不创建 Release。
-
-## TrollStore 的三种签名步骤
-
-1. **无签名编译**：`CODE_SIGNING_ALLOWED=NO`，没有使用 Apple 开发者签名，产出 `AkiChat-iOS14-unsigned.ipa`。
-2. **本地 ad-hoc**：备用 `AkiChat-iOS14-adhoc.ipa` 使用 macOS `codesign --sign -`，不需要账号或证书，不是 TrollStore 的永久签名。没有添加私有 entitlement。
-3. **TrollStore 安装**：TrollStore 安装时按其机制重新签名/注册。官方说明见 [TrollStore README](https://github.com/opa334/TrollStore)。iOS 14.8 在其支持区间内；本项目不需要越狱注入、root helper 或私有权限。
-
-先尝试 unsigned 包；若当前 TrollStore/ldid 版本拒绝完全无签名的 Mach-O，使用工作流同时提供的 adhoc 包。仍有问题时，先在 TrollStore 设置检查其官方 ldid 是否已安装/更新。
-
-若需要在 Mac 上按官方 ldid 流程补签，可解压 unsigned IPA，对 `Payload/AkiChat.app/AkiChat` 执行 `ldid -S Payload/AkiChat.app/AkiChat`，再 `zip -r AkiChat-iOS14-fakesigned.ipa Payload`。这只是本地 fake signing，最终仍由 TrollStore 安装处理；不要添加任意私有 entitlement，不要改最低系统版本，也无需开发者证书。工具本身请从可信官方来源安装。
-
-在设备上首次启动后检查：保存密钥→重启应用仍可使用→普通连续多轮→思考开关及三种强度→图片→停止/断网/重试→重启后的历史。请记录设备、系统、TrollStore 版本。CI 成功不代表这份真机清单已经执行。
-
-## 测试与验收状态
-
-XCTest 覆盖请求 JSON、默认模型/地址、思考开关和强度、OpenAI 参数隔离、上下文、图片内容块、SSE 每个字节切分、CR/LF、多行事件、异常 JSON、usage、HTTP 错误、超时、取消、提前断流、SQLite 落盘重开、Provider 配置、损坏数据保护、导入导出、Markdown 和最低系统元数据。网络测试仅用 Mock URLProtocol，不连接实际 API。
-
-`check_compatibility.py` 是已知新 API 的静态回归检查；Xcode 针对 iOS 14.0 的编译负责 SDK 可用性诊断。两者都不能完整替代 iOS 14.8 真机测试。真实 API 也需要用户自己的密钥，仓库不将其用于 CI。
-
-初始交付环境为 Windows。具体 CI 执行结果以 [Actions 记录](https://github.com/AkiSenn/akichat/actions) 为准，不将未执行的 Xcode/真机测试称为通过。
-
-## 常见问题
+**未声称在用户 iPhone XR / iOS 14.8 安装或使用真实 API Key 验收成功。** 较新模拟器不能代替真机，待执行项见 [DEVICE_TEST_MATRIX.md](docs/DEVICE_TEST_MATRIX.md)。
 
 | 问题 | 排查 |
 |---|---|
-| 401 / 403 | 检查密钥是否来自当前服务商、权限是否有效；删除旧密钥后重新保存 |
-| 402 | DeepSeek 账户余额不足 |
-| 400 / 404 / 422 | 检查最终 URL、模型 ID、适配方式和图片能力；DeepSeek 用 `deepseek-flash` |
-| 429 | 额度/并发限制，稍后重试 |
-| 没有 usage | 部分兼容接口不返回 usage；仅在收到时显示 |
-| 自定义服务不支持 stream_options | 关闭该模型的“请求流式 Token usage 扩展”；普通兼容配置默认不发送该字段 |
-| 超时 / 中断 | 消息和部分回答会保留，点重新生成；进后台会主动停止 |
-| 图片失败 | 相册/云端原图失败时重新选择；发送失败点重新生成；上下文过大时减少历史消息 |
-| Keychain 错误 | 确认通过 TrollStore 正常安装/注册，使用固定 Bundle ID，检查 TrollStore/ldid；不要退回明文保存密钥 |
-| 本地保存失败 | 及时导出备份，检查设备存储；不要在未备份前卸载 |
-| Actions 编译失败 | 查看 `AkiChat-build-diagnostics` 与具体失败步骤；不要提高 Deployment Target 规避 |
-| Actions 没有运行 | 在仓库 Actions 设置允许运行工作流；手动 Run workflow；检查账户分钟数/额度 |
-| 安装后无法启动 | 检查 IPA 来源与结构、尝试 adhoc 包、检查 TrollStore/持久化助手；提交设备日志定位 |
+| /models 404/空列表 | 保留缓存或手动添加，接口不一定实现发现 |
+| 图片/工具按钮禁用 | 能力未声明；确认文档后在模型库覆盖 |
+| 401/403 | 对应 Provider 密钥或权限 |
+| 402/429 | 余额、频率、并发或额度 |
+| 400/422 | 核对模型 ID、路径、能力、输出字段；推理模型可关闭采样参数 |
+| 搜索不启动 | 检查工具总开关、模式、模型能力、外部请求同意及官方 DeepSeek 密钥 |
+| 上下文不足 | 调整预算/窗口/摘要策略；原始记录保留 |
+| 摘要失败 | 旧版本保留，重试或换摘要模型 |
+| Keychain 错误 | 确认 TrollStore 注册、固定 Bundle ID、ldid 正常；不改为明文密钥 |
+| 后台停止 | 主动取消并保存，避免 iOS 14 后台挂起形成残缺请求 |
+| CI 排队或失败 | 等待 macOS 队列，读取真实日志修复；不提高部署目标或忽略错误 |
 
-## 开源
+## 开源与后续范围
 
-独立原生实现采用 [MIT](LICENSE)。仅参考 Chatbox 通用功能理念，无复制其 GPL 代码或资源。[第三方说明](THIRD_PARTY_NOTICES.md) 列出构建工具及许可证。
+独立原生实现，只参考 [Chatbox](https://github.com/chatboxai/chatbox) 通用功能理念，不复制其 GPL 实现、商标或资产。真实提交记录归属开发贡献；共同作者尾注遵循已核对的官方实现，具体见 AUTHORS，GitHub Contributors 展示不作保证。
+
+Bing HTML 实验搜索、Tavily/BoCha、MCP、复杂公式、图片生成、更多主题和跨会话账单统计未实现，没有虚假入口；扩展接口与边界见 [TODO](docs/TODO.md)。核心搜索不依赖 Bing 网页解析。
+
+协议核对（2026-10-23）：[DeepSeek Chat](https://api-docs.deepseek.com/api/create-chat-completion/)、[Models](https://api-docs.deepseek.com/api/list-models/)、[Thinking/tools](https://api-docs.deepseek.com/guides/thinking_mode/)、[Search/Fetch](https://api-docs.deepseek.com/guides/search/)、[Vision](https://api-docs.deepseek.com/guides/vision/)、[Prefix Beta](https://api-docs.deepseek.com/guides/chat_prefix_completion/)、[OpenAI Chat](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)。

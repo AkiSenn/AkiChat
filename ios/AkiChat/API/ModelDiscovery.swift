@@ -33,6 +33,7 @@ enum ModelDiscovery {
             if let old = cached.first(where: { $0.id == remote.id }) {
                 value.favorite = old.favorite; value.order = old.order; value.overrides = old.overrides
                 value.systemPrompt = old.systemPrompt; value.presetIDs = old.presetIDs
+                value.contextWindowOverride = old.contextWindowOverride; value.outputLimitOverride = old.outputLimitOverride
                 if old.manual { value.contextWindow = old.contextWindow ?? value.contextWindow; value.outputLimit = old.outputLimit ?? value.outputLimit }
             }
             return value

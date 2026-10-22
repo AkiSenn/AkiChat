@@ -88,17 +88,21 @@ enum RequestBuilder {
         }
         let prefix = usePrefix && !useTools && conversation.options.prefixEnabled && provider.options.supportsPrefix && provider.kind == .deepSeek
         if prefix && !conversation.options.assistantPrefix.isEmpty { messages.append(["role": "assistant", "content": conversation.options.assistantPrefix, "prefix": true]) }
-        var body: [String: Any] = ["model": provider.modelID, "messages": messages,
-            "stream": stream, "max_tokens": plan.outputBudget]
+        var body: [String: Any] = ["model": provider.modelID, "messages": messages, "stream": stream]
+        let officialOpenAI = provider.kind == .openAI && requestHost(provider.baseURL) == "api.openai.com"
+        body[provider.options.tokenLimitField?.rawValue ?? (officialOpenAI ? "max_completion_tokens" : "max_tokens")] = plan.outputBudget
         if useTools { body["tools"] = tools; body["tool_choice"] = "auto" }
         if provider.kind == .deepSeek && provider.supportsThinking {
             body["thinking"] = ["type": conversation.thinking ? "enabled" : "disabled"]
             if conversation.thinking { body["reasoning_effort"] = conversation.effort.rawValue }
         }
-        if !(provider.kind == .deepSeek && provider.supportsThinking && conversation.thinking) {
+        let sampling = provider.options.sendSamplingParameters ?? !officialOpenAI
+        if sampling && !(provider.kind == .deepSeek && provider.supportsThinking && conversation.thinking) {
             body["temperature"] = min(2, max(0, settings.temperature))
         }
-        body["top_p"] = provider.kind == .deepSeek && conversation.thinking ? max(0.95, settings.topP) : settings.topP
+        if sampling && !(provider.kind == .deepSeek && !conversation.thinking && provider.modelID == "deepseek-flash") {
+            body["top_p"] = provider.kind == .deepSeek && conversation.thinking ? max(0.95, settings.topP) : settings.topP
+        }
         if stream && provider.requestsStreamingUsage { body["stream_options"] = ["include_usage": true] }
         let data = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         guard data.count <= 48 * 1024 * 1024 else { throw AppError.validation("请求体超过 48 MiB，请减少上下文或图片。") }
@@ -121,4 +125,5 @@ enum RequestBuilder {
         return !name.isEmpty && name.utf8.allSatisfy { (65...90).contains($0) || (97...122).contains($0) || (48...57).contains($0) || $0 == 45 } &&
             !reserved.contains(lower) && !lower.contains("token") && !lower.contains("secret") && !lower.contains("key")
     }
+    private static func requestHost(_ value: String) -> String? { URL(string: value)?.host?.lowercased() }
 }

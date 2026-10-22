@@ -36,7 +36,7 @@ struct ModelsView: View {
                                 VStack(alignment: .leading, spacing: 7) {
                                     Text(model.name).font(.headline).foregroundColor(.primary)
                                     Text(model.id).font(.caption).foregroundColor(.secondary)
-                                    Text(model.contextWindow.map { "上下文 \($0) tokens" } ?? "上下文容量未声明，可手动覆盖")
+                                    Text((model.contextWindowOverride ?? model.contextWindow).map { "上下文 \($0) tokens" } ?? "上下文容量未声明，可手动覆盖")
                                         .font(.caption2).foregroundColor(.secondary)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                             }.disabled(store.isGenerating && selecting)
@@ -75,8 +75,9 @@ struct ModelEditor: View {
                         TextField("显示名称", text: $model.name)
                         Stepper("排序权重：\(model.order)", value: $model.order, in: -100...100)
                         Toggle("收藏", isOn: $model.favorite)
-                        numeric("上下文 Token 容量（0 = 未知）", value: $model.contextWindow)
-                        numeric("最大输出 Tokens（0 = 未知）", value: $model.outputLimit)
+                        numeric("覆盖上下文容量（留空使用元数据）", value: $model.contextWindowOverride)
+                        numeric("覆盖输出上限（留空使用元数据）", value: $model.outputLimitOverride)
+                        Text("服务端容量：\(model.contextWindow.map(String.init) ?? "未知") / 输出 \(model.outputLimit.map(String.init) ?? "未知")").font(.caption).foregroundColor(.secondary)
                     }
                     Card {
                         Text("能力覆盖：自动 / 开启 / 关闭").font(.headline)

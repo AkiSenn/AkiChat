@@ -94,8 +94,18 @@ enum ExportService {
         guard data.count <= 80 * 1024 * 1024 else { throw AppError.validation("导入文件不得超过 80 MiB") }
         let archive = try JSONDecoder().decode(Archive.self, from: data)
         guard archive.version == 1 else { throw AppError.validation("不支持的数据版本") }
+        guard archive.conversations.count <= 5000 else { throw AppError.validation("会话数量超过导入限制") }
         var ids = Set<UUID>()
         for c in archive.conversations {
+            let options = c.options
+            guard (1...32).contains(options.context.recentTurns), (1024...4000000).contains(options.context.inputBudget),
+                  (256...393216).contains(options.context.outputBudget), (1...8).contains(options.maxToolRounds),
+                  c.messages.count <= 100000, (c.summaries ?? []).count <= 1000,
+                  (c.summaries ?? []).allSatisfy({ $0.text.utf8.count <= 64000 }) else { throw AppError.validation("导入配置或摘要超出限制") }
+            for m in c.messages {
+                guard m.content.utf8.count <= 8 * 1024 * 1024, m.reasoning.utf8.count <= 8 * 1024 * 1024,
+                      (m.toolCalls ?? []).count <= 8, (m.toolCalls ?? []).allSatisfy({ $0.function.arguments.utf8.count <= 65536 }) else { throw AppError.validation("导入消息或工具参数超出限制") }
+            }
             guard ids.insert(c.id).inserted, Set(c.messages.map(\.id)).count == c.messages.count else {
                 throw AppError.validation("记录包含重复 ID")
             }
@@ -109,11 +119,16 @@ enum ExportService {
         return archive.conversations
     }
     static func markdown(_ c: Conversation) -> String {
-        "# \(c.title)\n\n" + c.messages.map { m in
-            "## \(m.role == .user ? "你" : "AkiChat")\n\n" +
+        let messages = c.messages.map { m -> String in
+            let role = m.role == .user ? "你" : (m.role == .tool ? "工具结果" : "AkiChat")
+            let tools = (m.toolCalls ?? []).map { "\n\n工具 \($0.function.name)（\($0.id)）\n\n```json\n\($0.function.arguments)\n```" }.joined()
+            let sources = (m.sources ?? []).map { "\n- [\($0.title)](\($0.url))" }.joined()
+            return "## \(role)\n\n" +
             (m.reasoning.isEmpty ? "" : "<details><summary>思考</summary>\n\n\(m.reasoning)\n\n</details>\n\n") +
-            m.content + m.images.map { "\n\n![图片](\($0.dataURL))" }.joined() + "\n\n"
+            m.content + tools + m.images.map { "\n\n![图片](\($0.dataURL))" }.joined() + sources + "\n\n"
         }.joined()
+        let summaries = (c.summaries ?? []).map { "## 摘要版本 \($0.id)\n\n\($0.text)\n\n覆盖 \($0.coveredMessageIDs.count) 条原始消息；额外用量 \($0.usage?.total_tokens.map(String.init) ?? "未返回") tokens。\n\n" }.joined()
+        return "# \(c.title)\n\n" + messages + summaries
     }
 }
 

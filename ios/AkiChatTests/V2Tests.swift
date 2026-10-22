@@ -15,9 +15,11 @@ final class DiscoveryTests: XCTestCase {
     }
     func testMergePreservesCustomizationAndMissingModels() {
         var old = ModelRecord(id: "x", name: "Old"); old.favorite = true; old.overrides.tools = true; old.order = -1
+        old.contextWindowOverride = 64000
         let merged = ModelDiscovery.merge([ModelRecord(id: "x", name: "New")], cached: [old, ModelRecord(id: "offline", name: "Offline")])
         XCTAssertEqual(merged[0].name, "New"); XCTAssertTrue(merged[0].favorite)
         XCTAssertEqual(merged[0].overrides.tools, true); XCTAssertEqual(merged.count, 2)
+        XCTAssertEqual(merged[0].contextWindowOverride, 64000)
     }
     func testMalformedModelsAndDuplicateIDs() throws {
         XCTAssertThrowsError(try ModelDiscovery.parse(Data("{}".utf8), provider: .deepSeek))
@@ -28,6 +30,17 @@ final class DiscoveryTests: XCTestCase {
         XCTAssertEqual(try Endpoint.url("https://api.example.com/v1", path: "/v1/chat/completions").absoluteString, "https://api.example.com/v1/chat/completions")
         XCTAssertEqual(try Endpoint.url("https://api.example.com/custom", path: "/generate").absoluteString, "https://api.example.com/custom/generate")
         XCTAssertThrowsError(try Endpoint.url("https://api.example.com", path: "https://other.com"))
+    }
+    func testOpenAIOutputParameterAndSamplingOverride() throws {
+        var p = Provider.openAI; p.modelID = "example-model"
+        var c = Conversation(providerID: p.id); c.messages = [Message(role: .user, content: "Hi")]
+        let request = try RequestBuilder.make(provider: p, key: "mock", conversation: c, settings: AppSettings(), stream: false)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+        XCTAssertNotNil(body["max_completion_tokens"]); XCTAssertNil(body["max_tokens"]); XCTAssertNil(body["temperature"])
+        p.options.tokenLimitField = .maxTokens; p.options.sendSamplingParameters = true
+        let custom = try RequestBuilder.make(provider: p, key: "mock", conversation: c, settings: AppSettings(), stream: false)
+        let value = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(custom.httpBody)) as? [String: Any])
+        XCTAssertNotNil(value["max_tokens"]); XCTAssertNotNil(value["temperature"])
     }
     func testV1DecodingRemainsCompatible() throws {
         let provider = try JSONDecoder().decode(Provider.self, from: JSONEncoder().encode(Provider.deepSeek))

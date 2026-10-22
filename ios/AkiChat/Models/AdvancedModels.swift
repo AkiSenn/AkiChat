@@ -1,5 +1,7 @@
 import Foundation
 
+enum OutputTokenField: String, Codable, CaseIterable { case maxTokens = "max_tokens", maxCompletionTokens = "max_completion_tokens" }
+
 struct ProviderOptions: Codable, Equatable {
     var chatPath = "/chat/completions"
     var modelsPath = "/models"
@@ -11,6 +13,8 @@ struct ProviderOptions: Codable, Equatable {
     var outputLimit = 4096
     var systemPrompt = ""
     var presetIDs: [UUID] = []
+    var tokenLimitField: OutputTokenField?
+    var sendSamplingParameters: Bool?
 }
 extension Provider {
     var options: ProviderOptions {
@@ -38,6 +42,8 @@ struct ModelRecord: Codable, Identifiable, Equatable {
     var name: String
     var contextWindow: Int?
     var outputLimit: Int?
+    var contextWindowOverride: Int?
+    var outputLimitOverride: Int?
     var inputModalities: [String] = []
     var outputModalities: [String] = []
     var effort: [String] = []
@@ -59,8 +65,8 @@ struct ModelRecord: Codable, Identifiable, Equatable {
         options.supportsTools = overrides.tools ?? discovered.tools ?? false
         options.supportsSystem = overrides.systemPrompt ?? discovered.systemPrompt ?? base.options.supportsSystem
         options.supportsPrefix = overrides.prefix ?? discovered.prefix ?? false
-        options.contextWindow = contextWindow ?? base.options.contextWindow
-        options.outputLimit = outputLimit ?? base.options.outputLimit
+        options.contextWindow = contextWindowOverride ?? contextWindow ?? base.options.contextWindow
+        options.outputLimit = outputLimitOverride ?? outputLimit ?? base.options.outputLimit
         options.systemPrompt += (options.systemPrompt.isEmpty || systemPrompt.isEmpty ? "" : "\n\n") + systemPrompt
         options.presetIDs += presetIDs
         result.options = options
