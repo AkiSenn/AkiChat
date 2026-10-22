@@ -116,6 +116,10 @@ final class ChatRun: Cancellable {
         if let i = conversation.messages.indices.last, conversation.messages[i].role == .assistant,
            conversation.messages[i].state == .generating || conversation.messages[i].toolCalls?.isEmpty == false {
             conversation.messages[i].state = .failed; conversation.messages[i].error = error.localizedDescription
+            let recorded = Set((conversation.messages[i].toolRecords ?? []).map(\.id))
+            let missing = (conversation.messages[i].toolCalls ?? []).filter { !recorded.contains($0.id) }
+            if conversation.messages[i].toolRecords == nil { conversation.messages[i].toolRecords = [] }
+            conversation.messages[i].toolRecords?.append(contentsOf: missing.map { ToolRecord(call: $0, result: "未执行：" + error.localizedDescription, failed: true) })
         } else { conversation.messages.append(Message(role: .assistant, content: "", state: .failed, error: error.localizedDescription)) }
         publish("失败"); completion(.failure(error))
     }
@@ -123,6 +127,13 @@ final class ChatRun: Cancellable {
         guard !terminal else { return }; terminal = true
         sender?.cancel(); toolTask?.cancel(); sender = nil; toolTask = nil
         for i in conversation.messages.indices where conversation.messages[i].state == .generating { conversation.messages[i].state = .stopped }
+        if let i = conversation.messages.lastIndex(where: { $0.toolCalls?.isEmpty == false }), conversation.messages.last?.role == .tool || conversation.messages.last?.id == conversation.messages[i].id {
+            conversation.messages[i].state = .stopped
+            let recorded = Set((conversation.messages[i].toolRecords ?? []).map(\.id))
+            let missing = (conversation.messages[i].toolCalls ?? []).filter { !recorded.contains($0.id) }.map { ToolRecord(call: $0, result: "用户取消，未完成执行。", failed: true) }
+            if conversation.messages[i].toolRecords == nil { conversation.messages[i].toolRecords = [] }
+            conversation.messages[i].toolRecords?.append(contentsOf: missing)
+        }
         publish("已停止"); completion(.failure(URLError(.cancelled)))
     }
 }

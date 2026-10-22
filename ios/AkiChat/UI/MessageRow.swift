@@ -72,11 +72,11 @@ struct MessageRow: View, Equatable {
             }
             if !isActive {
                 HStack(spacing: 20) {
-                    Button { UIPasteboard.general.string = message.content } label: { Image(systemName: "doc.on.doc") }.accessibilityLabel("复制消息")
+                    Button { UIPasteboard.general.string = message.content } label: { Image(systemName: "doc.on.doc").frame(width: 44, height: 44) }.accessibilityLabel("复制消息")
                     if message.role == .user {
-                        Button(action: onEdit) { Image(systemName: "pencil") }.accessibilityLabel("编辑并重新发送")
+                        Button(action: onEdit) { Image(systemName: "pencil").frame(width: 44, height: 44) }.accessibilityLabel("编辑并重新发送")
                     } else {
-                        Button(action: onRetry) { Label("重新生成", systemImage: "arrow.clockwise") }.accessibilityLabel("重试回答")
+                        Button(action: onRetry) { Label("重新生成", systemImage: "arrow.clockwise").frame(minHeight: 44) }.accessibilityLabel("重试回答")
                     }
                 }.font(.system(size: 11)).foregroundColor(.secondary)
             }

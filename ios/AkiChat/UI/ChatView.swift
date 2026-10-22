@@ -173,7 +173,7 @@ struct ChatView: View {
                         Label("深度思考", systemImage: "sparkles").font(.system(size: 12, weight: .medium))
                             .padding(.horizontal, 10).padding(.vertical, 7)
                             .background(store.thinking ? Theme.accent.opacity(0.12) : Color.secondary.opacity(0.08)).cornerRadius(12)
-                    }.disabled(store.isGenerating)
+                    }.frame(minHeight: 44).disabled(store.isGenerating)
                 }
                 Button {
                     guard store.settings.options.externalConsent else { store.notice = "联网会向 DeepSeek 发送查询并可能产生费用，请在会话控制台中启用同意开关。"; sheet = .advanced; return }
