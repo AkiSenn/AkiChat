@@ -6,6 +6,17 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum ImageService {
+    static func validateImported(_ attachment: Attachment) throws {
+        guard let source = CGImageSourceCreateWithData(attachment.jpeg as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              CGImageSourceGetType(source) as String? == UTType.jpeg.identifier,
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int,
+              width == attachment.width, height == attachment.height,
+              width > 0, height > 0, width <= 2048, height <= 2048 else {
+            throw AppError.validation("导入记录含有无效图片，或图片尺寸与元数据不一致。")
+        }
+    }
     static func prepare(url: URL) throws -> Attachment {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else { throw AppError.validation("无法读取图片，请选择其他图片重试。") }
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,

@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import UIKit
 @testable import AkiChat
 
 final class RequestTests: XCTestCase {

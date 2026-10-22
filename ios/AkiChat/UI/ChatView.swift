@@ -88,10 +88,12 @@ struct ChatView: View {
                                 .equatable().id(message.id)
                         }
                         Color.clear.frame(height: 1).id("latest")
-                    }.padding(20)
+                    }.padding(20).background(GeometryReader { geometry in
+                        Color.clear.preference(key: MessageHeightKey.self, value: geometry.size.height)
+                    })
                 }
                 .simultaneousGesture(DragGesture().onChanged { _ in followLatest = false })
-                .onChange(of: store.renderRevision) { _ in
+                .onPreferenceChange(MessageHeightKey.self) { _ in
                     if followLatest { proxy.scrollTo("latest", anchor: .bottom) }
                 }
                 .onChange(of: store.selectedID) { _ in followLatest = true; proxy.scrollTo("latest", anchor: .bottom) }
@@ -194,4 +196,9 @@ struct ChatView: View {
                 .navigationBarItems(trailing: Button("完成") { sheet = nil })
         }.navigationViewStyle(StackNavigationViewStyle())
     }
+}
+
+private struct MessageHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

@@ -101,13 +101,14 @@ final class AppStore: ObservableObject {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !draftImages.isEmpty else { return }
         // Validate configuration before clearing the persisted draft.
-        do { _ = try configuredRequest(probe: true) } catch { notice = error.localizedDescription; return }
+        let request: URLRequest
+        do { request = try configuredRequest(probe: true) } catch { notice = error.localizedDescription; return }
         let user = Message(role: .user, content: text, images: draftImages)
         mutate {
             if $0.messages.isEmpty { $0.title = String((text.isEmpty ? "图片对话" : text).prefix(30)) }
             $0.messages.append(user); $0.draft = ""; $0.draftImages = []; $0.updatedAt = Date()
         }
-        beginGeneration()
+        beginGeneration(preparedRequest: request)
     }
     func editAndResend(_ id: UUID, text: String) {
         stop()
@@ -131,13 +132,13 @@ final class AppStore: ObservableObject {
         if probe { c.messages.append(Message(role: .user, content: draft, images: draftImages)) }
         return try RequestBuilder.make(provider: p, key: try KeychainStore.read(p.apiKeyReference) ?? "", conversation: c, settings: settings, stream: settings.streaming && p.supportsStreaming)
     }
-    private func beginGeneration() {
+    private func beginGeneration(preparedRequest: URLRequest? = nil) {
         let answer = Message(role: .assistant, content: "", state: .generating)
         mutate { $0.messages.append(answer) }
         persist(immediate: true)
         lastCheckpoint = Date()
         do {
-            let request = try configuredRequest()
+            let request = try preparedRequest ?? configuredRequest()
             let stream = settings.streaming && provider?.supportsStreaming == true
             let token = UUID(); generationID = token; isGenerating = true
             let transport = ChatTransport(); self.transport = transport
@@ -204,6 +205,9 @@ final class AppStore: ObservableObject {
     }
     func importArchive(_ data: Data) throws {
         let incoming = try ExportService.decode(data)
+        for c in incoming {
+            for image in c.messages.flatMap(\.images) + c.draftImages { try ImageService.validateImported(image) }
+        }
         guard let p = providers.first else { return }
         for var c in incoming {
             // Import as copies, preserving local records and binding unknown providers locally.
