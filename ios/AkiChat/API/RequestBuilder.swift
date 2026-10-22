@@ -1,7 +1,10 @@
 import Foundation
 
 enum Endpoint {
-    static func chatURL(_ input: String) throws -> URL {
+    static func chatURL(_ input: String, path: String = "/chat/completions", beta: Bool = false) throws -> URL {
+        try url(input, path: path, beta: beta)
+    }
+    static func url(_ input: String, path endpoint: String, beta: Bool = false) throws -> URL {
         guard var parts = URLComponents(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
               parts.scheme?.lowercased() == "https", let host = parts.host, !host.isEmpty,
               parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil else {
@@ -9,7 +12,15 @@ enum Endpoint {
         }
         var path = parts.path
         while path.hasSuffix("/") { path.removeLast() }
-        if !path.hasSuffix("/chat/completions") { path += "/chat/completions" }
+        guard endpoint.hasPrefix("/"), !endpoint.contains("?"), !endpoint.contains("#"), !endpoint.contains("://"), !endpoint.contains("..") else { throw AppError.validation("端点路径必须以 / 开始，不含查询参数或父目录。") }
+        if path.hasSuffix("/chat/completions") { path = String(path.dropLast("/chat/completions".count)) }
+        if path.hasSuffix("/models") { path = String(path.dropLast("/models".count)) }
+        if beta {
+            if path.hasSuffix("/v1") { path = String(path.dropLast(3)) }
+            if !path.hasSuffix("/beta") { path += "/beta" }
+        }
+        if endpoint.hasPrefix("/v1/") && path.hasSuffix("/v1") { path = String(path.dropLast(3)) }
+        if !path.hasSuffix(endpoint) { path += endpoint }
         parts.path = path
         guard let url = parts.url else { throw AppError.validation("API 地址无效") }
         return url
@@ -38,7 +49,7 @@ enum RequestBuilder {
             throw AppError.validation("模型 ID 不能为空")
         }
         var messages: [[String: Any]] = []
-        if !settings.systemPrompt.isEmpty { messages.append(["role": "system", "content": settings.systemPrompt]) }
+        if provider.options.supportsSystem && !settings.systemPrompt.isEmpty { messages.append(["role": "system", "content": settings.systemPrompt]) }
         let history = ContextBuilder.messages(conversation.messages, limit: settings.contextCount)
         let images = history.flatMap(\.images)
         guard images.count <= 600 else { throw AppError.validation("上下文图片数量超出限制") }
@@ -73,9 +84,9 @@ enum RequestBuilder {
         if stream && provider.requestsStreamingUsage { body["stream_options"] = ["include_usage": true] }
         let data = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         guard data.count <= 48 * 1024 * 1024 else { throw AppError.validation("请求体超过 48 MiB，请减少上下文或图片。") }
-        var request = URLRequest(url: try Endpoint.chatURL(provider.baseURL))
+        var request = URLRequest(url: try Endpoint.chatURL(provider.baseURL, path: provider.options.chatPath))
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = min(300, max(10, provider.options.timeout))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(stream ? "text/event-stream" : "application/json", forHTTPHeaderField: "Accept")
         for (name, value) in provider.customHeaders {

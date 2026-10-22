@@ -18,12 +18,13 @@ struct Provider: Codable, Identifiable, Equatable {
     var supportsThinking = false
     var supportsStreaming = true
     var requestsStreamingUsage = false
+    var advanced: ProviderOptions?
     static let deepSeek = Provider(name: "DeepSeek", baseURL: "https://api.deepseek.com",
         modelID: "deepseek-flash", displayName: "DeepSeek V4.1 Flash 1017", kind: .deepSeek,
         supportsVision: true, supportsThinking: true, requestsStreamingUsage: true)
 }
 
-enum MessageRole: String, Codable { case system, user, assistant }
+enum MessageRole: String, Codable { case system, user, assistant, tool }
 enum MessageState: String, Codable { case complete, generating, stopped, failed }
 struct TokenUsage: Codable, Equatable {
     var prompt_tokens: Int?
@@ -48,6 +49,10 @@ struct Message: Codable, Identifiable, Equatable {
     var usage: TokenUsage?
     var error: String?
     var finishReason: String?
+    var toolCalls: [ToolCall]?
+    var toolCallID: String?
+    var toolRecords: [ToolRecord]?
+    var sources: [SearchSource]?
 }
 struct Conversation: Codable, Identifiable, Equatable {
     var id = UUID()
@@ -59,6 +64,9 @@ struct Conversation: Codable, Identifiable, Equatable {
     var effort: ReasoningEffort = .high
     var draft = ""
     var draftImages: [Attachment] = []
+    var advanced: ConversationOptions?
+    var summaries: [SummaryVersion]?
+    var activeSummaryID: UUID?
 }
 struct AppSettings: Codable, Equatable {
     var appearance: AppearanceMode = .automatic
@@ -69,6 +77,7 @@ struct AppSettings: Codable, Equatable {
     var topP = 1.0
     var maxTokens = 4096
     var streaming = true
+    var advanced: GlobalOptions?
 }
 struct Archive: Codable {
     var version = 1

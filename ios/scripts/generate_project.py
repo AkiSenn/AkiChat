@@ -45,9 +45,9 @@ def generate():
             settings.update({"DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym" if configuration == "Release" else "dwarf", "SWIFT_OPTIMIZATION_LEVEL": "-O" if configuration == "Release" else "-Onone"})
             if configuration == "Debug": settings.update({"SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG", "ENABLE_TESTABILITY": "YES", "ONLY_ACTIVE_ARCH": "YES"})
             if owner == "app":
-                settings.update({"PRODUCT_BUNDLE_IDENTIFIER": "app.akichat.ios", "PRODUCT_NAME": "AkiChat", "INFOPLIST_FILE": "AkiChat/Info.plist", "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon", "CODE_SIGNING_ALLOWED": "NO", "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/Frameworks", "SWIFT_EMIT_LOC_STRINGS": "NO"})
+                settings.update({"PRODUCT_BUNDLE_IDENTIFIER": "com.akisenn.akichat", "PRODUCT_NAME": "AkiChat", "INFOPLIST_FILE": "AkiChat/Info.plist", "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon", "CODE_SIGNING_ALLOWED": "NO", "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/Frameworks", "SWIFT_EMIT_LOC_STRINGS": "NO"})
             if owner == "tests":
-                settings.update({"PRODUCT_BUNDLE_IDENTIFIER": "app.akichat.ios.tests", "PRODUCT_NAME": "AkiChatTests", "GENERATE_INFOPLIST_FILE": "YES", "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/AkiChat.app/AkiChat", "BUNDLE_LOADER": "$(TEST_HOST)", "CODE_SIGNING_ALLOWED": "NO", "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/Frameworks @loader_path/Frameworks"})
+                settings.update({"PRODUCT_BUNDLE_IDENTIFIER": "com.akisenn.akichat.tests", "PRODUCT_NAME": "AkiChatTests", "GENERATE_INFOPLIST_FILE": "YES", "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/AkiChat.app/AkiChat", "BUNDLE_LOADER": "$(TEST_HOST)", "CODE_SIGNING_ALLOWED": "NO", "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/Frameworks @loader_path/Frameworks"})
             body = " ".join(f"{k} = {q(v)};" for k, v in sorted(settings.items()))
             configs.append(obj(owner + configuration, f"isa = XCBuildConfiguration; buildSettings = {{ {body} }}; name = {configuration};"))
         obj(owner + "-configs", f"isa = XCConfigurationList; buildConfigurations = {array(configs)}; defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;")

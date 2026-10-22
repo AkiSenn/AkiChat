@@ -176,6 +176,9 @@ struct ChatView: View {
             ScrollView {
                 VStack(spacing: 12) {
                     ForEach(store.providers) { provider in
+                        NavigationLink(destination: ModelsView(providerID: provider.id, selecting: true, onSelect: { sheet = nil }).environmentObject(store)) {
+                            Label("\(provider.name) · 模型库与发现", systemImage: "square.stack")
+                        }.frame(minHeight: 44)
                         Button {
                             store.selectProvider(provider.id); sheet = nil
                         } label: {

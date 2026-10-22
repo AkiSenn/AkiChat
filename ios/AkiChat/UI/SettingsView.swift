@@ -61,7 +61,8 @@ struct SettingsView: View {
                         Button("删除全部聊天记录") { deletion = .all }.foregroundColor(.red)
                     }
                     Card {
-                        Text("AkiChat 1.0").font(.headline)
+                        Text("AkiChat 2.0").font(.headline)
+                        Text("Created by AkiSenn\nBuilt with OpenAI Codex").font(.footnote)
                         Text("为 iPhone 与长久使用而写。独立原生实现，MIT License。无第三方运行时依赖。")
                             .font(.footnote).foregroundColor(.secondary)
                         NavigationLink("关于与开源许可证", destination: LicenseView())
@@ -88,9 +89,10 @@ struct LicenseView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("独立原生重写").font(.title2).bold()
+                Text("Created by AkiSenn\nBuilt with OpenAI Codex").font(.headline)
                 Text("仅参考 Chatbox 的通用功能理念，没有移植 React、Electron、组件、图标或其他实现。Chatbox Community Edition 为 GPL-3.0，本应用独立代码为 MIT。")
                 Text("没有第三方 Swift 包。使用 Apple 系统框架。构建工具及其许可证详见仓库 THIRD_PARTY_NOTICES.md。")
-                Text(Bundle.main.url(forResource: "LICENSE", withExtension: "txt").flatMap { try? String(contentsOf: $0) } ?? "MIT License — Copyright (c) 2026 AkiChat contributors")
+                Text(Bundle.main.url(forResource: "LICENSE", withExtension: "txt").flatMap { try? String(contentsOf: $0) } ?? "MIT License — Copyright (c) 2026 AkiSenn")
                     .font(.system(size: 12, design: .monospaced))
             }.padding(20)
         }.navigationTitle("关于与许可证")

@@ -9,6 +9,9 @@ struct ProvidersView: View {
             VStack(spacing: 16) {
                 NoticeBanner()
                 ForEach(store.providers) { p in
+                    NavigationLink(destination: ModelsView(providerID: p.id).environmentObject(store)) {
+                        Label("\(p.name) 模型库", systemImage: "square.stack")
+                    }.frame(minHeight: 44)
                     Button { editing = p } label: {
                         Card {
                             HStack {
@@ -25,6 +28,7 @@ struct ProvidersView: View {
                 Button { editing = Provider(name: "", baseURL: "https://", modelID: "", displayName: "") } label: {
                     Label("添加 OpenAI 兼容服务商 / 模型", systemImage: "plus.circle.fill").padding()
                 }
+                Button("添加 OpenAI 预设") { var p = Provider.openAI; p.id = UUID(); p.apiKeyReference = UUID().uuidString; editing = p }
                 Text("每个配置代表一个服务商与模型组合；同一地址可配置多个模型。密钥仅保存到 Keychain。自定义 Header 只用于非敏感元数据。")
                     .font(.caption).foregroundColor(.secondary)
             }.padding(18)
@@ -58,6 +62,8 @@ struct ProviderEditor: View {
                         field("显示名称", text: $provider.displayName)
                         field("Base URL（HTTPS）", text: $provider.baseURL)
                         field("API 模型 ID", text: $provider.modelID)
+                        field("Chat Completions 路径", text: $provider.options.chatPath)
+                        field("Models 路径", text: $provider.options.modelsPath)
                         Picker("适配方式", selection: $provider.kind) {
                             Text("OpenAI 兼容").tag(ProviderKind.openAI)
                             Text("DeepSeek 官方格式").tag(ProviderKind.deepSeek)
@@ -77,9 +83,20 @@ struct ProviderEditor: View {
                         Toggle("支持深度思考（DeepSeek 适配）", isOn: $provider.supportsThinking)
                         Toggle("支持流式响应", isOn: $provider.supportsStreaming)
                         Toggle("请求流式 Token usage 扩展", isOn: $provider.requestsStreamingUsage)
+                        Toggle("支持 Function Calling", isOn: $provider.options.supportsTools)
+                        Toggle("支持 System Prompt", isOn: $provider.options.supportsSystem)
+                        Toggle("支持 Prefix Beta", isOn: $provider.options.supportsPrefix)
+                        Stepper("超时：\(Int(provider.options.timeout)) 秒", value: $provider.options.timeout, in: 10...300, step: 10)
+                        Stepper("上下文：\(provider.options.contextWindow) tokens", value: $provider.options.contextWindow, in: 4096...1048576, step: 4096)
+                        Stepper("最大输出：\(provider.options.outputLimit) tokens", value: $provider.options.outputLimit, in: 256...131072, step: 256)
                         Text("非 DeepSeek 适配不会发送 thinking 与 reasoning_effort 字段。").font(.caption).foregroundColor(.secondary)
                         Text("自定义非敏感 Headers（JSON 对象）").font(.caption)
                         TextEditor(text: $headers).frame(height: 80).font(.system(size: 12, design: .monospaced))
+                    }
+                    Card {
+                        Text("Provider 默认提示词").font(.headline)
+                        TextEditor(text: $provider.options.systemPrompt).frame(height: 90)
+                        PresetSelection(selected: $provider.options.presetIDs, presets: store.settings.options.presets)
                     }
                     Card {
                         Button(testing ? "取消测试" : "测试连接和密钥") { if testing { cancelTest() } else { test() } }

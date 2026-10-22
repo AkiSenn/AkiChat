@@ -30,8 +30,8 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
                completion: @escaping (Result<ChatSnapshot, Error>) -> Void) {
         worker.async {
             self.stream = stream; self.onUpdate = onUpdate; self.onCompletion = completion
-            configuration.timeoutIntervalForRequest = 120
-            configuration.timeoutIntervalForResource = 600
+            configuration.timeoutIntervalForRequest = request.timeoutInterval
+            configuration.timeoutIntervalForResource = max(120, request.timeoutInterval * 5)
             configuration.urlCache = nil
             configuration.httpCookieStorage = nil
             let queue = OperationQueue()

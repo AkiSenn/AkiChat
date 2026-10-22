@@ -61,7 +61,7 @@ DeepSeek 开启思考时发送 `"thinking":{"type":"enabled"}`，关闭时发送
 
 ## iOS 14 与本地开发
 
-打开 `ios/AkiChat.xcodeproj`，选择共享 Scheme **AkiChat**。所有 Debug/Release 和测试目标的 Deployment Target 固定为 **14.0**，Bundle ID 固定为 **app.akichat.ios**。建议 Xcode 16.4（CI 固定版本），Swift 编译模式为 5。
+打开 `ios/AkiChat.xcodeproj`，选择共享 Scheme **AkiChat**。所有 Debug/Release 和测试目标的 Deployment Target 固定为 **14.0**，Bundle ID 固定为 **com.akisenn.akichat**。建议 Xcode 16.4（CI 固定版本），Swift 编译模式为 5。
 
 使用 iOS 14 可用的 `NavigationView`、`ScrollViewReader`、`LazyVStack`、PHPicker、UITextView、UIActivityViewController；不使用 NavigationStack、PhotosPicker、SwiftData、原生 SwiftUI Markdown、URLSession.bytes。SwiftUI 处理键盘安全区域，主界面仅背景延伸到屏幕边缘。
 

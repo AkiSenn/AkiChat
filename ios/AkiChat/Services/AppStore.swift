@@ -10,17 +10,25 @@ final class AppStore: ObservableObject {
     @Published private(set) var selectedID: UUID?
     @Published private(set) var isGenerating = false
     @Published private(set) var renderRevision = 0
+    @Published private(set) var catalogs: [ModelCatalog] = []
+    @Published private(set) var refreshingModels: Set<UUID> = []
+    @Published private(set) var modelErrors: [UUID: String] = [:]
     @Published var notice: String?
     private var database: LocalDatabase?
     private let disk = DispatchQueue(label: "app.akichat.persistence", qos: .utility)
     private var transport: ChatTransport?
+    private var modelRequests: [UUID: JSONHTTPClient] = [:]
     private var generationID: UUID?
     private var saveWork: DispatchWorkItem?
     private var lastCheckpoint = Date.distantPast
     private var lifecycle: AnyCancellable?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     var current: Conversation? { conversations.first { $0.id == selectedID } }
-    var provider: Provider? { providers.first { $0.id == current?.providerID } }
+    var provider: Provider? {
+        guard let base = providers.first(where: { $0.id == current?.providerID }) else { return nil }
+        let id = current?.options.modelID ?? base.modelID
+        return models(for: base.id).first(where: { $0.id == id })?.apply(to: base) ?? base
+    }
     var messages: [Message] { current?.messages ?? [] }
     var draft: String { current?.draft ?? "" }
     var draftImages: [Attachment] { current?.draftImages ?? [] }
@@ -35,7 +43,8 @@ final class AppStore: ObservableObject {
         do {
             let db = try suppliedDatabase ?? LocalDatabase()
             // Decode everything before enabling writes; never overwrite an unreadable store.
-            providers = try db.load("providers.v1", as: [Provider].self) ?? [.deepSeek]
+            providers = try db.load("providers.v1", as: [Provider].self) ?? [.deepSeek, .openAI]
+            catalogs = try db.load("catalogs.v2", as: [ModelCatalog].self) ?? []
             settings = try db.load("settings.v1", as: AppSettings.self) ?? AppSettings()
             conversations = try db.load("conversations.v1", as: [Conversation].self) ?? []
             for i in conversations.indices {
@@ -76,7 +85,52 @@ final class AppStore: ObservableObject {
         conversations.insert(c, at: 0); selectedID = c.id; renderRevision += 1; persist(immediate: true)
     }
     func selectConversation(_ id: UUID) { stop(); selectedID = id; renderRevision += 1 }
-    func selectProvider(_ id: UUID) { guard !isGenerating else { return }; mutate { $0.providerID = id }; persist() }
+    func selectProvider(_ id: UUID) { guard !isGenerating else { return }; mutate { $0.providerID = id; $0.options.modelID = nil }; persist() }
+    func selectModel(providerID: UUID, modelID: String) {
+        guard !isGenerating else { return }
+        mutate { $0.providerID = providerID; $0.options.modelID = modelID }; persist()
+    }
+    func models(for providerID: UUID) -> [ModelRecord] {
+        if let catalog = catalogs.first(where: { $0.id == providerID }), !catalog.models.isEmpty { return catalog.models }
+        guard let p = providers.first(where: { $0.id == providerID }), !p.modelID.isEmpty else { return [] }
+        var m = ModelRecord(id: p.modelID, name: p.displayName)
+        m.discovered = ModelCapabilities(vision: p.supportsVision, thinking: p.supportsThinking, tools: p.options.supportsTools, streaming: p.supportsStreaming, systemPrompt: p.options.supportsSystem, prefix: p.options.supportsPrefix)
+        return [m]
+    }
+    func saveModel(_ model: ModelRecord, providerID: UUID) {
+        var catalog = catalogs.first(where: { $0.id == providerID }) ?? ModelCatalog(id: providerID, models: models(for: providerID))
+        if let index = catalog.models.firstIndex(where: { $0.id == model.id }) { catalog.models[index] = model }
+        else { catalog.models.append(model) }
+        replaceCatalog(catalog)
+    }
+    func deleteModel(_ id: String, providerID: UUID) {
+        guard var c = catalogs.first(where: { $0.id == providerID }), c.models.first(where: { $0.id == id })?.manual == true else { return }
+        c.models.removeAll { $0.id == id }; replaceCatalog(c)
+        for i in conversations.indices where conversations[i].providerID == providerID && conversations[i].options.modelID == id { conversations[i].options.modelID = c.models.first?.id }
+        persist(immediate: true)
+    }
+    private func replaceCatalog(_ value: ModelCatalog) {
+        if let i = catalogs.firstIndex(where: { $0.id == value.id }) { catalogs[i] = value } else { catalogs.append(value) }
+        persist(immediate: true)
+    }
+    func cancelModelRefresh(_ id: UUID) { modelRequests.removeValue(forKey: id)?.cancel(); refreshingModels.remove(id) }
+    func refreshModels(_ id: UUID, onlyIfNeeded: Bool = false) {
+        guard let p = providers.first(where: { $0.id == id }), !refreshingModels.contains(id) else { return }
+        if onlyIfNeeded && (catalogs.first(where: { $0.id == id })?.syncedAt != nil || (try? KeychainStore.read(p.apiKeyReference)) == nil) { return }
+        do {
+            let request = try JSONHTTPClient.request(url: Endpoint.url(p.baseURL, path: p.options.modelsPath), key: KeychainStore.read(p.apiKeyReference) ?? "", timeout: p.options.timeout, headers: p.customHeaders)
+            let client = JSONHTTPClient(); modelRequests[id] = client; refreshingModels.insert(id); modelErrors[id] = nil
+            client.start(request) { [weak self] result in
+                guard let self = self, self.modelRequests[id] === client else { return }
+                self.modelRequests[id] = nil; self.refreshingModels.remove(id)
+                do {
+                    let fetched = try ModelDiscovery.parse(result.get(), provider: p)
+                    guard !fetched.isEmpty else { throw AppError.validation("模型列表为空，已保留本地配置。") }
+                    self.replaceCatalog(ModelCatalog(id: id, models: ModelDiscovery.merge(fetched, cached: self.models(for: id)), syncedAt: Date()))
+                } catch { self.modelErrors[id] = error.localizedDescription }
+            }
+        } catch { modelErrors[id] = error.localizedDescription }
+    }
     func rename(_ id: UUID, title: String) {
         guard let i = conversations.firstIndex(where: { $0.id == id }) else { return }
         let value = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -184,7 +238,7 @@ final class AppStore: ObservableObject {
     }
     func saveProvider(_ value: Provider, newKey: String?, deleteKey: Bool = false) throws {
         _ = try Endpoint.chatURL(value.baseURL)
-        guard !value.name.isEmpty, !value.modelID.isEmpty, !value.displayName.isEmpty else { throw AppError.validation("请填写名称与模型 ID") }
+        guard !value.name.isEmpty, !value.displayName.isEmpty else { throw AppError.validation("请填写服务商名称与显示名称") }
         guard value.customHeaders.keys.allSatisfy(RequestBuilder.safeHeader) else { throw AppError.validation("自定义 Header 只能包含非敏感字段") }
         guard database != nil else { throw AppError.storage("数据库不可用，无法保存配置") }
         if deleteKey { try KeychainStore.delete(value.apiKeyReference) }
@@ -192,10 +246,12 @@ final class AppStore: ObservableObject {
         var next = providers
         if let i = next.firstIndex(where: { $0.id == value.id }) { next[i] = value } else { next.append(value) }
         providers = next; persist(immediate: true)
+        if newKey?.isEmpty == false && !deleteKey { refreshModels(value.id) }
     }
     func deleteProvider(_ id: UUID) throws {
         guard providers.count > 1 else { throw AppError.validation("请至少保留一个服务商") }
         stop()
+        cancelModelRefresh(id)
         guard let value = providers.first(where: { $0.id == id }), database != nil else { return }
         let next = providers.filter { $0.id != id }
         try KeychainStore.delete(value.apiKeyReference)
@@ -222,12 +278,13 @@ final class AppStore: ObservableObject {
     private func persist(immediate: Bool = false) {
         saveWork?.cancel()
         guard let database = database else { return }
-        let conversations = conversations, providers = providers, settings = settings
+        let conversations = conversations, providers = providers, settings = settings, catalogs = catalogs
         let work = DispatchWorkItem { [weak self] in
             do {
                 try database.save(conversations, key: "conversations.v1")
                 try database.save(providers, key: "providers.v1")
                 try database.save(settings, key: "settings.v1")
+                try database.save(catalogs, key: "catalogs.v2")
             } catch { DispatchQueue.main.async { self?.notice = "本地保存失败，请及时导出备份。" } }
         }
         saveWork = work

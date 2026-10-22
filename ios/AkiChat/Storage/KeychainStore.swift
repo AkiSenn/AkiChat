@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum KeychainStore {
-    private static let service = "app.akichat.ios.keys"
+    private static let service = "com.akisenn.akichat.keys"
     private static func query(_ reference: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: reference]
     }

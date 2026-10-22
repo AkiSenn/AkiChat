@@ -71,7 +71,7 @@ jobs:
       - name: Capture launch screenshot
         run: |
           set -euo pipefail
-          xcrun simctl launch '${{ steps.simulator.outputs.id }}' app.akichat.ios
+          xcrun simctl launch '${{ steps.simulator.outputs.id }}' com.akisenn.akichat
           sleep 3
           xcrun simctl io '${{ steps.simulator.outputs.id }}' screenshot build/launch.png
       - name: Upload verified IPA

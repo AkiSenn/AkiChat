@@ -16,7 +16,7 @@ def validate_app(app):
     with (app / "Info.plist").open("rb") as f:
         info = plistlib.load(f)
     assert app.name == "AkiChat.app"
-    assert info["CFBundleIdentifier"] == "app.akichat.ios"
+    assert info["CFBundleIdentifier"] == "com.akisenn.akichat"
     assert info["MinimumOSVersion"] == "14.0", info.get("MinimumOSVersion")
     assert info["CFBundleSupportedPlatforms"] == ["iPhoneOS"]
     assert info["CFBundleExecutable"] == "AkiChat"
@@ -46,7 +46,7 @@ def main():
         binary = copied / "AkiChat"
         if args.adhoc:
             # Local ad-hoc only: no Apple account, certificate, provisioning, or private entitlements.
-            output("codesign", "--force", "--sign", "-", "--identifier", "app.akichat.ios", str(copied))
+            output("codesign", "--force", "--sign", "-", "--identifier", "com.akisenn.akichat", str(copied))
             output("codesign", "--verify", "--strict", str(copied))
         else:
             result = subprocess.run(["codesign", "-dv", str(copied)], capture_output=True, text=True)
