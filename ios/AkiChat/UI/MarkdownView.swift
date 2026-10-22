@@ -5,10 +5,12 @@ struct StreamingMarkdownView: View {
     let source: String
     let size: Double
     @State private var rendered = ""
+    // Keep one clock across incoming snapshots so continuous output cannot reset the interval.
+    @State private var renderClock = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
     var body: some View {
         MarkdownView(source: rendered, size: size)
             .onAppear { rendered = source }
-            .onReceive(Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()) { _ in
+            .onReceive(renderClock) { _ in
                 if rendered != source { rendered = source }
             }
     }

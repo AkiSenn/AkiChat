@@ -132,7 +132,7 @@ Windows 可编辑和 Python 自检，不能运行 Xcode。新增 Swift 文件后
 
 工作流支持 push、workflow_dispatch、Tag push 与已发布 Release，使用 GitHub macos-15、固定 Xcode 16.4 和匹配 iOS 18.5 模拟器。先真机 arm64 Release 无签名编译，再检查 App、嵌入 Mach-O/Framework 的 arm64/iPhoneOS/最低系统，打包两种 IPA，执行 Mock 测试与截图，最后上传。模拟器测试宿主另用本地 ad-hoc 签名与最小普通 Keychain entitlement，解决无签名测试宿主缺少访问组的 -34018；CI 身份前缀不是 Apple 团队或账号，也不用于真机 Release。只在全部通过后发布 tag Release。失败日志与 xcresult 在 AkiChat-build-diagnostics。
 
-打包检查主程序、执行权限、Bundle ID、Info.plist、MinimumOSVersion 精确 14.0、Assets.car、无 provisioning、unsigned 确无签名、ZIP CRC 和 Payload/AkiChat.app；不接受模拟器、空文件或假 IPA。标签示例：`git tag v2.0.1 && git push origin v2.0.1`。具体已执行状态见 [Actions](https://github.com/AkiSenn/AkiChat/actions)。
+打包检查主程序、执行权限、Bundle ID、Info.plist、MinimumOSVersion 精确 14.0、Assets.car、无 provisioning、unsigned 确无签名、ZIP CRC 和 Payload/AkiChat.app；不接受模拟器、空文件或假 IPA。标签示例：`git tag v2.0.2 && git push origin v2.0.2`。具体已执行状态见 [Actions](https://github.com/AkiSenn/AkiChat/actions)。
 
 ## 测试与排查
 
