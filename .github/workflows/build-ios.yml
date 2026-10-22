@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: write
     env:
-      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode and check source compatibility
@@ -51,9 +51,9 @@ jobs:
           DEVICE_ID=$(python3 - <<'PY'
           import json
           data = json.load(open('build/devices.json'))
-          devices = [(runtime, d) for runtime, entries in data['devices'].items() if 'iOS-18-2' in runtime for d in entries if d.get('isAvailable') and 'iPhone' in d['name']]
+          devices = [(runtime, d) for runtime, entries in data['devices'].items() if 'iOS-18-5' in runtime for d in entries if d.get('isAvailable') and 'iPhone' in d['name']]
           if not devices:
-              raise SystemExit('No iOS 18.2 iPhone simulator for Xcode 16.2; install that runtime or update the runner configuration.')
+              raise SystemExit('No iOS 18.5 iPhone simulator for Xcode 16.4; install that runtime or update the runner configuration.')
           print(devices[0][1]['udid'])
           PY
           )

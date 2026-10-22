@@ -124,7 +124,9 @@ struct ProviderEditor: View {
         do {
             guard !deleteKey else { throw AppError.validation("取消删除密钥后再测试") }
             let p = try validated()
-            let apiKey = key.isEmpty ? try KeychainStore.read(p.apiKeyReference) ?? "" : key
+            let apiKey: String
+            if key.isEmpty { apiKey = try KeychainStore.read(p.apiKeyReference) ?? "" }
+            else { apiKey = key }
             var c = Conversation(providerID: p.id); c.thinking = false
             c.messages = [Message(role: .user, content: "Reply with OK.")]
             var settings = AppSettings(); settings.systemPrompt = ""; settings.maxTokens = 256

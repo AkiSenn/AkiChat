@@ -61,7 +61,7 @@ DeepSeek 开启思考时发送 `"thinking":{"type":"enabled"}`，关闭时发送
 
 ## iOS 14 与本地开发
 
-打开 `ios/AkiChat.xcodeproj`，选择共享 Scheme **AkiChat**。所有 Debug/Release 和测试目标的 Deployment Target 固定为 **14.0**，Bundle ID 固定为 **app.akichat.ios**。建议 Xcode 16.2（CI 固定版本），Swift 编译模式为 5。
+打开 `ios/AkiChat.xcodeproj`，选择共享 Scheme **AkiChat**。所有 Debug/Release 和测试目标的 Deployment Target 固定为 **14.0**，Bundle ID 固定为 **app.akichat.ios**。建议 Xcode 16.4（CI 固定版本），Swift 编译模式为 5。
 
 使用 iOS 14 可用的 `NavigationView`、`ScrollViewReader`、`LazyVStack`、PHPicker、UITextView、UIActivityViewController；不使用 NavigationStack、PhotosPicker、SwiftData、原生 SwiftUI Markdown、URLSession.bytes。SwiftUI 处理键盘安全区域，主界面仅背景延伸到屏幕边缘。
 
@@ -99,9 +99,9 @@ Core Data 保存版本化 Codable 记录。密钥不进入数据库、UserDefaul
 
 ## Actions 与 Release
 
-工作流支持任意 push（包括 tag）、workflow_dispatch 和已发布 GitHub Release。使用 GitHub `macos-15` Runner 和预装 `/Applications/Xcode_16.2.app`，该组合来自 [Runner 官方镜像清单](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md)。固定版本不存在时直接失败，避免静默更换工具链。
+工作流支持任意 push（包括 tag）、workflow_dispatch 和已发布 GitHub Release。使用 GitHub `macos-15` Runner 和预装 `/Applications/Xcode_16.4.app`，该组合来自 [Runner 官方镜像清单](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md)。固定版本不存在时直接失败，避免静默更换工具链。
 
-流程：源码/工程自检 → 真机 arm64 Release 无签名编译 → 校验真实 `.app` → 两种 IPA → iOS 18.2 模拟器 Mock 测试和启动截图 → 上传产物。自动测试使用较新模拟器，编译目标仍是 14.0；这不能代替 iOS 14.8 真机验收。
+流程：源码/工程自检 → 真机 arm64 Release 无签名编译 → 校验真实 `.app` → 两种 IPA → iOS 18.5 模拟器 Mock 测试和启动截图 → 上传产物。自动测试使用较新模拟器，编译目标仍是 14.0；这不能代替 iOS 14.8 真机验收。
 
 打包器检查实际可执行文件大小、执行权限、Mach-O arm64、最低系统 14.0、iPhoneOS 平台、Info.plist、Assets.car、无 provisioning、原始包确实未签名、ZIP CRC 和 `Payload/AkiChat.app` 结构。任何检查失败即停止。仅成功构建和测试后才发布用户下载产物，失败日志在诊断 Artifact 中。
 
