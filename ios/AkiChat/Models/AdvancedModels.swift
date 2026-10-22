@@ -82,6 +82,8 @@ struct ContextOptions: Codable, Equatable {
     var autoCompress = false
     var threshold = 0.75
     var summaryProviderID: UUID?
+    var summaryModelID: String?
+    var calibration: Double?
 }
 struct ConversationOptions: Codable, Equatable {
     var modelID: String?

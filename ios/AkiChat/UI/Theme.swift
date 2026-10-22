@@ -5,6 +5,10 @@ enum Theme {
     static let background = Color(UIColor.systemGroupedBackground)
     static let card = Color(UIColor.secondarySystemGroupedBackground)
 }
+struct BlurView: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIVisualEffectView { UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial)) }
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {}
+}
 struct Card<Content: View>: View {
     let content: Content
     init(@ViewBuilder content: () -> Content) { self.content = content() }

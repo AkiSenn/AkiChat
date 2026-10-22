@@ -20,6 +20,10 @@ struct SettingsView: View {
                         Text("多个服务商 · Keychain 密钥存储").font(.caption).foregroundColor(.secondary)
                     }
                     Card {
+                        NavigationLink("提示词预设与导入导出", destination: PromptLibraryView().environmentObject(store)).frame(minHeight: 44)
+                        NavigationLink("当前会话上下文、摘要与工具", destination: AdvancedConversationView().environmentObject(store)).frame(minHeight: 44)
+                    }
+                    Card {
                         Label("外观", systemImage: "circle.lefthalf.fill").font(.headline)
                         Picker("外观模式", selection: setting(\.appearance)) {
                             Text("跟随系统").tag(AppearanceMode.automatic)
@@ -31,10 +35,9 @@ struct SettingsView: View {
                     }
                     Card {
                         Label("对话偏好", systemImage: "text.bubble").font(.headline)
-                        Text("System Prompt").font(.caption).foregroundColor(.secondary)
+                        Text("应用默认 System Prompt").font(.caption).foregroundColor(.secondary)
                         TextEditor(text: setting(\.systemPrompt)).frame(height: 110).padding(6).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2)))
-                        Stepper("上下文消息：\(store.settings.contextCount)", value: setting(\.contextCount), in: 2...100, step: 2)
-                        Text("按完整轮次截取历史；思考内容不会加入普通聊天上下文。").font(.caption).foregroundColor(.secondary)
+                        Text("上下文与输出预算按会话配置。普通请求省略思考历史；DeepSeek 工具请求保留原始轮次的思考字段。").font(.caption).foregroundColor(.secondary)
                         Toggle("流式响应", isOn: setting(\.streaming))
                         Picker("推理强度", selection: Binding(get: { store.effort }, set: { store.setEffort($0) })) {
                             ForEach(ReasoningEffort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -43,11 +46,13 @@ struct SettingsView: View {
                     }
                     Card {
                         Label("生成参数", systemImage: "slider.horizontal.3").font(.headline)
-                        Text(String(format: "Temperature %.2f", store.settings.temperature))
-                        Slider(value: setting(\.temperature), in: 0...2, step: 0.05)
+                        if !(store.provider?.kind == .deepSeek && store.thinking) {
+                            Text(String(format: "Temperature %.2f", store.settings.temperature))
+                            Slider(value: setting(\.temperature), in: 0...2, step: 0.05)
+                        }
                         Text(String(format: "Top P %.2f", store.settings.topP))
                         Slider(value: setting(\.topP), in: 0.05...1, step: 0.05)
-                        Stepper("最大输出：\(store.settings.maxTokens) tokens", value: setting(\.maxTokens), in: 256...32768, step: 256)
+                        Text("输出预算在会话控制台中设置；不同模型使用各自的能力上限。").font(.caption).foregroundColor(.secondary)
                         Text("DeepSeek 思考模式不发送 Temperature；Flash 思考模式 Top P 最低为 0.95。").font(.caption).foregroundColor(.secondary)
                     }
                     Card {

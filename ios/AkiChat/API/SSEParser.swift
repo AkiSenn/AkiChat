@@ -47,8 +47,15 @@ struct SSEParser {
 }
 
 struct ChatEnvelope: Decodable {
+    struct ToolDelta: Decodable {
+        struct Function: Decodable { var name: String?; var arguments: String? }
+        var index: Int?
+        var id: String?
+        var type: String?
+        var function: Function?
+    }
     struct Choice: Decodable {
-        struct Part: Decodable { var content: String?; var reasoning_content: String? }
+        struct Part: Decodable { var content: String?; var reasoning_content: String?; var tool_calls: [ToolDelta]? }
         var delta: Part?
         var message: Part?
         var finish_reason: String?

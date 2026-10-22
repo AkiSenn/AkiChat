@@ -1,6 +1,19 @@
 import SwiftUI
 import UIKit
 
+struct StreamingMarkdownView: View {
+    let source: String
+    let size: Double
+    @State private var rendered = ""
+    var body: some View {
+        MarkdownView(source: rendered, size: size)
+            .onAppear { rendered = source }
+            .onReceive(Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()) { _ in
+                if rendered != source { rendered = source }
+            }
+    }
+}
+
 struct MarkdownBlock: Identifiable, Equatable {
     enum Kind: Equatable { case paragraph, heading(Int), quote, code(String), table }
     var id: Int
@@ -135,11 +148,13 @@ private struct MeasuredText: UIViewRepresentable {
         var bold = false
         var markdown = false
         var style: UIUserInterfaceStyle = .unspecified
+        var category: UIContentSizeCategory = .large
     }
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
         view.isEditable = false; view.isScrollEnabled = false; view.backgroundColor = .clear
+        view.adjustsFontForContentSizeCategory = true
         view.textContainerInset = .zero; view.textContainer.lineFragmentPadding = 0
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         view.linkTextAttributes = [.foregroundColor: UIColor.systemBlue]
@@ -147,7 +162,7 @@ private struct MeasuredText: UIViewRepresentable {
     }
     func updateUIView(_ view: UITextView, context: Context) {
         let cache = context.coordinator
-        let sameStyle = cache.size == size && cache.bold == bold && cache.markdown == markdown && cache.style == view.traitCollection.userInterfaceStyle
+        let sameStyle = cache.size == size && cache.bold == bold && cache.markdown == markdown && cache.style == view.traitCollection.userInterfaceStyle && cache.category == view.traitCollection.preferredContentSizeCategory
         if cache.text != text || !sameStyle {
             if !markdown && sameStyle && text.hasPrefix(cache.text) {
                 let suffix = String(text.dropFirst(cache.text.count))
@@ -157,6 +172,7 @@ private struct MeasuredText: UIViewRepresentable {
             }
             cache.text = text; cache.size = size; cache.bold = bold; cache.markdown = markdown
             cache.style = view.traitCollection.userInterfaceStyle
+            cache.category = view.traitCollection.preferredContentSizeCategory
         }
         let measured = ceil(view.sizeThatFits(CGSize(width: max(1, width), height: .greatestFiniteMagnitude)).height)
         if abs(height - measured) > 0.5 { DispatchQueue.main.async { height = measured } }
@@ -164,7 +180,7 @@ private struct MeasuredText: UIViewRepresentable {
 }
 enum InlineMarkdown {
     static func render(_ source: String, size: CGFloat, color: UIColor, bold: Bool, enabled: Bool) -> NSAttributedString {
-        let base = UIFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
+        let base = UIFontMetrics(forTextStyle: .body).scaledFont(for: UIFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular))
         let baseAttributes: [NSAttributedString.Key: Any] = [.font: base, .foregroundColor: color]
         guard enabled else { return NSAttributedString(string: source, attributes: baseAttributes) }
         // One pass keeps code spans literal and avoids reinterpreting their contents as emphasis.

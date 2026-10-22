@@ -5,6 +5,7 @@ struct ChatSnapshot {
     var reasoning = ""
     var usage: TokenUsage?
     var finishReason: String?
+    var toolCalls: [ToolCall] = []
 }
 
 /// Each instance owns exactly one request. Delegate work and throttling share a serial queue.
@@ -22,6 +23,7 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
     private var sawFinish = false
     private var stream = true
     private var status = 0
+    private var toolParts: [Int: ToolCall] = [:]
     private var onUpdate: ((ChatSnapshot) -> Void)?
     private var onCompletion: ((Result<ChatSnapshot, Error>) -> Void)?
     // Inject URLProtocol through configuration in tests. Never log request headers or body.
@@ -95,6 +97,18 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
             let part = stream ? choice.delta : choice.message
             snapshot.content += part?.content ?? ""
             snapshot.reasoning += part?.reasoning_content ?? ""
+            for (position, delta) in (part?.tool_calls ?? []).enumerated() {
+                let index = delta.index ?? position
+                guard index >= 0, index < 8 else { throw AppError.validation("单轮最多 8 个工具调用") }
+                var call = toolParts[index] ?? ToolCall(id: "", function: .init(name: "", arguments: ""))
+                if let id = delta.id { call.id = id }
+                if let type = delta.type { call.type = type }
+                call.function.name += delta.function?.name ?? ""
+                call.function.arguments += delta.function?.arguments ?? ""
+                guard call.function.arguments.utf8.count <= 65536, call.function.name.count <= 128, call.id.count <= 256 else { throw AppError.validation("工具参数超出长度限制") }
+                toolParts[index] = call
+            }
+            snapshot.toolCalls = toolParts.keys.sorted().compactMap { toolParts[$0] }
             if let reason = choice.finish_reason, !reason.isEmpty {
                 sawFinish = true
                 snapshot.finishReason = reason
@@ -110,7 +124,7 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
         DispatchQueue.main.async { callback?(value) }
     }
     private func completeSuccess() {
-        if snapshot.content.isEmpty { complete(.failure(AppError.empty)) }
+        if snapshot.content.isEmpty && snapshot.toolCalls.isEmpty { complete(.failure(AppError.empty)) }
         else { complete(.success(snapshot)) }
     }
     private func complete(_ result: Result<ChatSnapshot, Error>) {

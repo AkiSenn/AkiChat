@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ConversationsView: View {
+    var onSelect: (() -> Void)? = nil
+    var onSettings: (() -> Void)? = nil
     @EnvironmentObject var store: AppStore
     @Environment(\.presentationMode) var presentation
     @State private var query = ""
@@ -30,7 +32,7 @@ struct ConversationsView: View {
                         TextField("搜索标题或消息", text: $query)
                     }.padding(14).background(Theme.card).cornerRadius(14)
                     ForEach(filtered) { c in
-                        Button { store.selectConversation(c.id); presentation.wrappedValue.dismiss() } label: {
+                        Button { store.selectConversation(c.id); close() } label: {
                             Card {
                                 HStack(alignment: .top) {
                                     VStack(alignment: .leading, spacing: 8) {
@@ -51,10 +53,11 @@ struct ConversationsView: View {
                     }
                     if filtered.isEmpty { Text("没有匹配的会话").foregroundColor(.secondary).padding(40) }
                     Text("长按会话可重命名、导出或删除").font(.caption).foregroundColor(.secondary)
+                    if let onSettings = onSettings { Button(action: onSettings) { Label("应用设置", systemImage: "gearshape").frame(minHeight: 44) } }
                 }.padding(18)
             }.background(Theme.background).navigationTitle("对话空间")
-                .navigationBarItems(leading: Button("导入 JSON") { importing = true }, trailing: Button {
-                    store.newConversation(); presentation.wrappedValue.dismiss()
+                .navigationBarItems(leading: HStack { Button("完成") { close() }; Button("导入") { importing = true } }, trailing: Button {
+                    store.newConversation(); close()
                 } label: { Image(systemName: "plus") })
         }.navigationViewStyle(StackNavigationViewStyle())
             .alert(item: $deleting) { c in
@@ -76,6 +79,7 @@ struct ConversationsView: View {
                 } catch { store.notice = error.localizedDescription }
             }
     }
+    private func close() { if let onSelect = onSelect { onSelect() } else { presentation.wrappedValue.dismiss() } }
     private func renameEditor(_ c: Conversation) -> some View {
         NavigationView {
             VStack(spacing: 20) {

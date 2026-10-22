@@ -8,6 +8,7 @@ struct MessageRow: View, Equatable {
     var onRetry: () -> Void
     var onEdit: () -> Void
     @State private var expanded = false
+    @State private var toolsExpanded = false
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.message == rhs.message && lhs.fontSize == rhs.fontSize && lhs.isActive == rhs.isActive
     }
@@ -39,8 +40,28 @@ struct MessageRow: View, Equatable {
                 }
             }
             if !message.content.isEmpty {
-                if isActive { NativeRichText(text: message.content, size: fontSize) }
+                if isActive { StreamingMarkdownView(source: message.content, size: fontSize) }
                 else { MarkdownView(source: message.content, size: fontSize) }
+            }
+            if let records = message.toolRecords, !records.isEmpty {
+                DisclosureGroup(isExpanded: $toolsExpanded) {
+                    ForEach(records) { record in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(record.call.function.name + (record.failed ? " · 失败" : " · 完成")).font(.caption).foregroundColor(record.failed ? .red : .secondary)
+                            NativeRichText(text: record.call.function.arguments + "\n" + String(record.result.prefix(12000)), size: max(12, fontSize - 3))
+                        }.padding(.vertical, 8)
+                    }
+                } label: { Text("工具记录 \(records.count) · 搜索 \(records.filter { $0.call.function.name == "web_search" }.count) 次（可能产生费用）").font(.caption) }
+            }
+            if let sources = message.sources, !sources.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("来源").font(.caption).foregroundColor(.secondary)
+                    ForEach(Array(sources.enumerated()), id: \.element.id) { item in
+                        if let url = ToolPolicy.publicURL(item.element.url) {
+                            Link("[\(item.offset + 1)] " + item.element.title, destination: url).font(.footnote).frame(minHeight: 44, alignment: .leading)
+                        }
+                    }
+                }
             }
             if let error = message.error { Text(error).font(.caption).foregroundColor(.red) }
             if message.state == .stopped { Text("已停止 · 内容已保留").font(.caption).foregroundColor(.secondary) }
