@@ -44,6 +44,7 @@ struct MessageRow: View, Equatable {
             }
             if let error = message.error { Text(error).font(.caption).foregroundColor(.red) }
             if message.state == .stopped { Text("已停止 · 内容已保留").font(.caption).foregroundColor(.secondary) }
+            if message.finishReason == "length" { Text("已达到最大输出长度，可在设置中提高上限。").font(.caption).foregroundColor(.secondary) }
             if let usage = message.usage {
                 Text("输入 \(usage.prompt_tokens ?? 0) · 输出 \(usage.completion_tokens ?? 0) · 共 \(usage.total_tokens ?? 0) tokens")
                     .font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)

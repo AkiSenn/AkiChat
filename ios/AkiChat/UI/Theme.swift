@@ -25,3 +25,16 @@ struct IconButton: View {
             .accessibilityLabel(label)
     }
 }
+
+struct NoticeBanner: View {
+    @EnvironmentObject var store: AppStore
+    var body: some View {
+        if let notice = store.notice {
+            HStack(alignment: .top, spacing: 10) {
+                Text(notice).font(.footnote).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Button { store.notice = nil } label: { Image(systemName: "xmark.circle.fill") }.accessibilityLabel("关闭提示")
+            }.padding(14).background(Theme.accent.opacity(0.1)).cornerRadius(14)
+        }
+    }
+}

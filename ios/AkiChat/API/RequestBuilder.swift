@@ -42,6 +42,11 @@ enum RequestBuilder {
         let history = ContextBuilder.messages(conversation.messages, limit: settings.contextCount)
         let images = history.flatMap(\.images)
         guard images.count <= 600 else { throw AppError.validation("上下文图片数量超出限制") }
+        let estimatedImageBytes = images.reduce(0) { $0 + (($1.jpeg.count + 2) / 3) * 4 + 128 }
+        let estimatedTextBytes = history.reduce(settings.systemPrompt.utf8.count) { $0 + $1.content.utf8.count }
+        guard estimatedImageBytes + estimatedTextBytes < 48 * 1024 * 1024 else {
+            throw AppError.validation("图片与上下文编码后将超过 48 MiB，请减少上下文或图片。")
+        }
         guard images.allSatisfy({ $0.jpeg.count <= 32 * 1024 * 1024 && $0.width > 0 && $0.height > 0 && $0.width <= (images.count >= 15 ? 4096 : 8192) && $0.height <= (images.count >= 15 ? 4096 : 8192) }),
               images.reduce(0, { $0 + $1.jpeg.count }) <= 64 * 1024 * 1024 else {
             throw AppError.validation("图片尺寸或总大小超出 API 限制")
@@ -65,7 +70,7 @@ enum RequestBuilder {
             body["temperature"] = min(2, max(0, settings.temperature))
         }
         body["top_p"] = provider.kind == .deepSeek && conversation.thinking ? max(0.95, settings.topP) : settings.topP
-        if stream { body["stream_options"] = ["include_usage": true] }
+        if stream && provider.requestsStreamingUsage { body["stream_options"] = ["include_usage": true] }
         let data = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         guard data.count <= 48 * 1024 * 1024 else { throw AppError.validation("请求体超过 48 MiB，请减少上下文或图片。") }
         var request = URLRequest(url: try Endpoint.chatURL(provider.baseURL))

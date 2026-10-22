@@ -19,6 +19,7 @@ struct ConversationsView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 14) {
+                    NoticeBanner()
                     HStack {
                         Image(systemName: "magnifyingglass").foregroundColor(.secondary)
                         TextField("搜索标题或消息", text: $query)

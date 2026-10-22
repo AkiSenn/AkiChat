@@ -4,6 +4,7 @@ struct ChatSnapshot {
     var content = ""
     var reasoning = ""
     var usage: TokenUsage?
+    var finishReason: String?
 }
 
 /// Each instance owns exactly one request. Delegate work and throttling share a serial queue.
@@ -96,6 +97,7 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
             snapshot.reasoning += part?.reasoning_content ?? ""
             if let reason = choice.finish_reason, !reason.isEmpty {
                 sawFinish = true
+                snapshot.finishReason = reason
                 if reason == "content_filter" { throw AppError.validation("服务商拦截了这次回答。") }
             }
         }

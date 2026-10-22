@@ -136,7 +136,7 @@ XCTest 覆盖请求 JSON、默认模型/地址、思考开关和强度、OpenAI 
 | 400 / 404 / 422 | 检查最终 URL、模型 ID、适配方式和图片能力；DeepSeek 用 `deepseek-flash` |
 | 429 | 额度/并发限制，稍后重试 |
 | 没有 usage | 部分兼容接口不返回 usage；仅在收到时显示 |
-| 自定义服务不支持 stream_options | 可关闭流式使用非流式，或使用支持 OpenAI 流式 usage 扩展的服务 |
+| 自定义服务不支持 stream_options | 关闭该模型的“请求流式 Token usage 扩展”；普通兼容配置默认不发送该字段 |
 | 超时 / 中断 | 消息和部分回答会保留，点重新生成；进后台会主动停止 |
 | 图片失败 | 相册/云端原图失败时重新选择；发送失败点重新生成；上下文过大时减少历史消息 |
 | Keychain 错误 | 确认通过 TrollStore 正常安装/注册，使用固定 Bundle ID，检查 TrollStore/ldid；不要退回明文保存密钥 |

@@ -17,9 +17,10 @@ struct Provider: Codable, Identifiable, Equatable {
     var supportsVision = false
     var supportsThinking = false
     var supportsStreaming = true
+    var requestsStreamingUsage = false
     static let deepSeek = Provider(name: "DeepSeek", baseURL: "https://api.deepseek.com",
         modelID: "deepseek-flash", displayName: "DeepSeek V4.1 Flash 1017", kind: .deepSeek,
-        supportsVision: true, supportsThinking: true)
+        supportsVision: true, supportsThinking: true, requestsStreamingUsage: true)
 }
 
 enum MessageRole: String, Codable { case system, user, assistant }
@@ -46,6 +47,7 @@ struct Message: Codable, Identifiable, Equatable {
     var state: MessageState = .complete
     var usage: TokenUsage?
     var error: String?
+    var finishReason: String?
 }
 struct Conversation: Codable, Identifiable, Equatable {
     var id = UUID()

@@ -10,6 +10,7 @@ struct SettingsView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    NoticeBanner()
                     Text("按你的节奏").font(.system(size: 30, weight: .bold, design: .rounded)).padding(.top, 8)
                     Text("模型、外观与每一次思考。").foregroundColor(.secondary)
                     Card {

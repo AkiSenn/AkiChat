@@ -31,9 +31,9 @@ final class AppStore: ObservableObject {
         let rect = ((draft.isEmpty ? " " : draft) as NSString).boundingRect(with: CGSize(width: width, height: 1000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: UIFont.systemFont(ofSize: 16)], context: nil)
         return min(140, max(42, ceil(rect.height) + 20))
     }
-    init() {
+    init(database suppliedDatabase: LocalDatabase? = nil) {
         do {
-            let db = try LocalDatabase()
+            let db = try suppliedDatabase ?? LocalDatabase()
             // Decode everything before enabling writes; never overwrite an unreadable store.
             providers = try db.load("providers.v1", as: [Provider].self) ?? [.deepSeek]
             settings = try db.load("settings.v1", as: AppSettings.self) ?? AppSettings()
@@ -171,6 +171,7 @@ final class AppStore: ObservableObject {
         mutate { c in
             if let i = c.messages.firstIndex(where: { $0.id == id }) {
                 c.messages[i].content = snapshot.content; c.messages[i].reasoning = snapshot.reasoning; c.messages[i].usage = snapshot.usage
+                c.messages[i].finishReason = snapshot.finishReason
             }
         }
     }

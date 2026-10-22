@@ -150,23 +150,33 @@ private struct MeasuredText: UIViewRepresentable {
 enum InlineMarkdown {
     static func render(_ source: String, size: CGFloat, color: UIColor, bold: Bool, enabled: Bool) -> NSAttributedString {
         let base = UIFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
-        let result = NSMutableAttributedString(string: source, attributes: [.font: base, .foregroundColor: color])
-        guard enabled else { return result }
-        // A deliberately small native renderer; block parsing is independent for later extensions.
-        let patterns = ["`([^`\n]+)`", "\\*\\*(.+?)\\*\\*", "(?<!\\*)\\*([^*\n]+)\\*(?!\\*)", "\\[([^\\]]+)\\]\\((https?://[^\\s)]+|mailto:[^\\s)]+)\\)"]
-        for (index, pattern) in patterns.enumerated() {
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-            let matches = regex.matches(in: result.string, range: NSRange(location: 0, length: result.length))
-            for match in matches.reversed() {
-                let captured = (result.string as NSString).substring(with: match.range(at: 1))
-                var attributes: [NSAttributedString.Key: Any] = [.font: base, .foregroundColor: color]
-                if index == 0 { attributes[.font] = UIFont.monospacedSystemFont(ofSize: size - 1, weight: .regular); attributes[.backgroundColor] = UIColor.secondarySystemBackground }
-                if index == 1 { attributes[.font] = UIFont.systemFont(ofSize: size, weight: .bold) }
-                if index == 2 { attributes[.font] = UIFont.italicSystemFont(ofSize: size) }
-                if index == 3 { attributes[.link] = (result.string as NSString).substring(with: match.range(at: 2)) }
-                result.replaceCharacters(in: match.range, with: NSAttributedString(string: captured, attributes: attributes))
+        let baseAttributes: [NSAttributedString.Key: Any] = [.font: base, .foregroundColor: color]
+        guard enabled else { return NSAttributedString(string: source, attributes: baseAttributes) }
+        // One pass keeps code spans literal and avoids reinterpreting their contents as emphasis.
+        let pattern = "`([^`\n]+)`|\\[([^\\]]+)\\]\\((https?://[^\\s)]+|mailto:[^\\s)]+)\\)|\\*\\*(.+?)\\*\\*|(?<!\\*)\\*([^*\n]+)\\*(?!\\*)|__([^_\n]+)__|(?<![\\w_])_([^_\n]+)_(?![\\w_])"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return NSAttributedString(string: source, attributes: baseAttributes) }
+        let input = source as NSString
+        let result = NSMutableAttributedString(string: "")
+        var cursor = 0
+        for match in regex.matches(in: source, range: NSRange(location: 0, length: input.length)) {
+            if match.range.location > cursor {
+                result.append(NSAttributedString(string: input.substring(with: NSRange(location: cursor, length: match.range.location - cursor)), attributes: baseAttributes))
             }
+            var attributes = baseAttributes
+            var group = 1
+            if match.range(at: 1).location != NSNotFound {
+                attributes[.font] = UIFont.monospacedSystemFont(ofSize: size - 1, weight: .regular)
+                attributes[.backgroundColor] = UIColor.secondarySystemBackground
+            } else if match.range(at: 2).location != NSNotFound {
+                group = 2; attributes[.link] = input.substring(with: match.range(at: 3))
+            } else {
+                group = (4...7).first(where: { match.range(at: $0).location != NSNotFound }) ?? 4
+                attributes[.font] = group == 4 || group == 6 ? UIFont.boldSystemFont(ofSize: size) : UIFont.italicSystemFont(ofSize: size)
+            }
+            result.append(NSAttributedString(string: input.substring(with: match.range(at: group)), attributes: attributes))
+            cursor = NSMaxRange(match.range)
         }
+        if cursor < input.length { result.append(NSAttributedString(string: input.substring(from: cursor), attributes: baseAttributes)) }
         return result
     }
 }

@@ -7,6 +7,7 @@ struct ProvidersView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                NoticeBanner()
                 ForEach(store.providers) { p in
                     Button { editing = p } label: {
                         Card {
@@ -75,6 +76,7 @@ struct ProviderEditor: View {
                         Toggle("支持图片理解", isOn: $provider.supportsVision)
                         Toggle("支持深度思考（DeepSeek 适配）", isOn: $provider.supportsThinking)
                         Toggle("支持流式响应", isOn: $provider.supportsStreaming)
+                        Toggle("请求流式 Token usage 扩展", isOn: $provider.requestsStreamingUsage)
                         Text("非 DeepSeek 适配不会发送 thinking 与 reasoning_effort 字段。").font(.caption).foregroundColor(.secondary)
                         Text("自定义非敏感 Headers（JSON 对象）").font(.caption)
                         TextEditor(text: $headers).frame(height: 80).font(.system(size: 12, design: .monospaced))

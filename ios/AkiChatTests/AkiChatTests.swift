@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import AkiChat
 
 final class RequestTests: XCTestCase {
@@ -35,9 +36,11 @@ final class RequestTests: XCTestCase {
     }
     func testOpenAIAdapterDoesNotLeakDeepSeekParameters() throws {
         var p = Provider.deepSeek; p.kind = .openAI
+        p.requestsStreamingUsage = false
         let value = try body(p, stream: false)
         XCTAssertNil(value["thinking"]); XCTAssertNil(value["reasoning_effort"])
         XCTAssertEqual(value["stream"] as? Bool, false); XCTAssertNil(value["stream_options"])
+        XCTAssertNil(try body(p)["stream_options"])
     }
     func testSystemContextAndNoHistoricalReasoning() throws {
         let p = Provider.deepSeek
@@ -161,8 +164,41 @@ final class StorageTests: XCTestCase {
         let blocks = MarkdownParser.blocks("# Heading\n\n- Item\n\n> Quote\n\n```swift\nlet x = 1\n```\n\n| A | B |\n|---|---|\n| 1 | 2 |")
         XCTAssertEqual(blocks.map(\.kind), [.heading(1), .paragraph, .quote, .code("swift"), .table])
     }
+    func testInlineCodeStaysLiteralAndLinksAreNative() {
+        let result = InlineMarkdown.render("`**literal**` **bold** _italic_ [link](https://example.com)", size: 16, color: .label, bold: false, enabled: true)
+        XCTAssertEqual(result.string, "**literal** bold italic link")
+        XCTAssertNotNil(result.attribute(.link, at: result.length - 1, effectiveRange: nil))
+    }
     func testMinimumOSVersion() {
         XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "MinimumOSVersion") as? String, "14.0")
+    }
+}
+
+final class LayoutTests: XCTestCase {
+    func testIPhoneXRLightAndDarkLayout() throws {
+        let database = try LocalDatabase(inMemory: true)
+        let draw = {
+            let store = AppStore(database: database)
+            let host = UIHostingController(rootView: ChatView().environmentObject(store).accentColor(Theme.accent))
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 414, height: 896))
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true }
+            for style in [UIUserInterfaceStyle.light, .dark] {
+                window.overrideUserInterfaceStyle = style
+                window.layoutIfNeeded(); host.view.layoutIfNeeded()
+                XCTAssertEqual(host.view.bounds.width, 414)
+                let image = UIGraphicsImageRenderer(bounds: window.bounds).image { context in
+                    window.layer.render(in: context.cgContext)
+                }
+                let attachment = XCTAttachment(image: image)
+                attachment.name = style == .dark ? "iPhone-XR-dark" : "iPhone-XR-light"
+                attachment.lifetime = .keepAlways
+                self.add(attachment)
+                XCTAssertNotNil(image.cgImage)
+            }
+        }
+        if Thread.isMainThread { draw() } else { DispatchQueue.main.sync(execute: draw) }
     }
 }
 
