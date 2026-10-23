@@ -19,7 +19,10 @@ final class AppStore: ObservableObject {
     let composer = ComposerState()
     @Published private(set) var provider: Provider?
     var providerName: String { providers.first { $0.id == current?.providerID }?.name ?? "选择服务商" }
-    var selectedModelLabel: String { current?.options.modelID ?? providers.first { $0.id == current?.providerID }?.modelID ?? "选择模型" }
+    var selectedModelLabel: String {
+        let id = current?.options.modelID ?? providers.first { $0.id == current?.providerID }?.modelID ?? ""
+        return id.isEmpty ? "选择模型" : id
+    }
     private var database: LocalDatabase?
     private let disk = DispatchQueue(label: "app.akichat.persistence", qos: .utility)
     private var run: ChatRun?
@@ -115,7 +118,9 @@ final class AppStore: ObservableObject {
     func newConversation() {
         stop(); commitDraft()
         guard let p = providers.first else { return }
-        let c = Conversation(providerID: provider?.id ?? p.id)
+        let selected = provider
+        var c = Conversation(providerID: selected?.id ?? p.id)
+        if let modelID = selected?.modelID { c.options.modelID = modelID }
         conversations.insert(c, at: 0); selectedID = c.id; loadSelection(); renderRevision += 1; persist(immediate: true)
     }
     func selectConversation(_ id: UUID) { stop(); commitDraft(); selectedID = id; loadSelection(); renderRevision += 1; persist(immediate: true) }

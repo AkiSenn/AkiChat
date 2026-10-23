@@ -119,6 +119,8 @@ final class PerformanceRegressionTests: XCTestCase {
         let body = try JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any]
         XCTAssertEqual(body?["model"] as? String, "deepseek-v4-pro")
         XCTAssertEqual(store.providerName, "DeepSeek"); XCTAssertEqual(store.selectedModelLabel, "deepseek-v4-pro")
+        store.newConversation()
+        XCTAssertEqual(store.providerName, "DeepSeek"); XCTAssertEqual(store.selectedModelLabel, "deepseek-v4-pro")
     }
     func testMeasureFiveHundredMessageStreamPresentation() {
         let base = history(500) + [Message(role: .assistant, content: "", state: .generating)]
