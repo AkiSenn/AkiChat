@@ -6,7 +6,7 @@ struct ProvidersView: View {
     @State private var deleting: Provider?
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            LazyVStack(spacing: 16) {
                 NoticeBanner()
                 ForEach(store.providers) { p in
                     NavigationLink(destination: ModelsView(providerID: p.id).environmentObject(store)) {
@@ -17,7 +17,6 @@ struct ProvidersView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 7) {
                                     Text(p.name).font(.headline)
-                                    Text(p.displayName).font(.subheadline)
                                     Text(p.modelID).font(.caption).foregroundColor(.secondary)
                                 }
                                 Spacer(); Image(systemName: "chevron.right")

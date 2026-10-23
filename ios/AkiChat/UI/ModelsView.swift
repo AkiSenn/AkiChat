@@ -13,7 +13,7 @@ struct ModelsView: View {
     }
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 14) {
                 TextField("搜索模型名称或 ID", text: $query).padding(14).background(Theme.card).cornerRadius(14)
                 HStack {
                     Button(store.refreshingModels.contains(providerID) ? "取消刷新" : "刷新 /models") {
@@ -51,7 +51,6 @@ struct ModelsView: View {
                 Text("未知能力保持未声明，不推断图片、思考或工具支持。长按模型可覆盖能力、排序与提示词。").font(.caption).foregroundColor(.secondary)
             }.padding(18)
         }.background(Theme.background).navigationTitle("模型库")
-            .onAppear { store.refreshModels(providerID, onlyIfNeeded: true) }
             .sheet(item: $editing) { ModelEditor(model: $0, providerID: providerID).environmentObject(store) }
             .alert(item: $deleting) { model in
                 Alert(title: Text("删除自定义模型？"), message: Text(model.id), primaryButton: .destructive(Text("删除")) { store.deleteModel(model.id, providerID: providerID) }, secondaryButton: .cancel(Text("取消")))

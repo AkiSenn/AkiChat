@@ -20,7 +20,7 @@ struct Provider: Codable, Identifiable, Equatable {
     var requestsStreamingUsage = false
     var advanced: ProviderOptions?
     static let deepSeek = Provider(name: "DeepSeek", baseURL: "https://api.deepseek.com",
-        modelID: "deepseek-flash", displayName: "DeepSeek V4.1 Flash 1017", kind: .deepSeek,
+        modelID: "deepseek-flash", displayName: "deepseek-flash", kind: .deepSeek,
         supportsVision: true, supportsThinking: true, requestsStreamingUsage: true)
 }
 

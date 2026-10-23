@@ -8,7 +8,7 @@ struct StreamingMarkdownView: View {
     // Keep one clock across incoming snapshots so continuous output cannot reset the interval.
     @State private var renderClock = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
     var body: some View {
-        MarkdownView(source: rendered, size: size)
+        MarkdownView(source: rendered, size: size, cacheResult: false)
             .onAppear { rendered = source }
             .onReceive(renderClock) { _ in
                 if rendered != source { rendered = source }
@@ -59,13 +59,54 @@ enum MarkdownParser {
     }
 }
 
+final class MarkdownDocument: ObservableObject {
+    final class Entry: NSObject { let blocks: [MarkdownBlock]; init(_ blocks: [MarkdownBlock]) { self.blocks = blocks } }
+    private static let queue: OperationQueue = {
+        let queue = OperationQueue(); queue.maxConcurrentOperationCount = 1; queue.qualityOfService = .userInitiated; return queue
+    }()
+    private static let cache: NSCache<NSString, Entry> = {
+        let cache = NSCache<NSString, Entry>(); cache.totalCostLimit = 12 * 1024 * 1024; cache.countLimit = 96; return cache
+    }()
+    @Published private(set) var blocks: [MarkdownBlock] = []
+    private var request = UUID()
+    private var requestedSource: String?
+    private var pending: BlockOperation?
+    private let parser: (String) -> [MarkdownBlock]
+    init(parser: @escaping (String) -> [MarkdownBlock] = MarkdownParser.blocks) { self.parser = parser }
+    func load(_ source: String, cacheResult: Bool = true) {
+        guard source != requestedSource else { return }
+        pending?.cancel()
+        requestedSource = source; let token = UUID(); request = token
+        if cacheResult, let cached = Self.cache.object(forKey: source as NSString) { blocks = cached.blocks; return }
+        let operation = BlockOperation()
+        let parser = parser
+        operation.addExecutionBlock { [weak self, weak operation] in
+            guard operation?.isCancelled == false else { return }
+            let blocks = parser(source)
+            guard operation?.isCancelled == false else { return }
+            if cacheResult { Self.cache.setObject(Entry(blocks), forKey: source as NSString, cost: source.utf8.count * 3) }
+            DispatchQueue.main.async { [weak self] in if self?.request == token { self?.blocks = blocks } }
+        }
+        pending = operation; Self.queue.addOperation(operation)
+    }
+    deinit { pending?.cancel() }
+}
+
 struct MarkdownView: View {
     let source: String
     let size: Double
-    @State private var blocks: [MarkdownBlock] = []
+    var cacheResult = true
+    @StateObject private var document = MarkdownDocument()
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ForEach(blocks) { block in
+            ForEach(document.blocks) { block in MarkdownBlockView(block: block, size: size).equatable() }
+        }.onAppear { document.load(source, cacheResult: cacheResult) }.onChange(of: source) { document.load($0, cacheResult: cacheResult) }
+    }
+}
+private struct MarkdownBlockView: View, Equatable {
+    let block: MarkdownBlock
+    let size: Double
+    var body: some View {
                 switch block.kind {
                 case .code(let language):
                     VStack(alignment: .leading, spacing: 10) {
@@ -88,9 +129,6 @@ struct MarkdownView: View {
                 case .table: MarkdownTable(text: block.text, size: size)
                 case .paragraph: NativeRichText(text: block.text, size: size, markdown: true)
                 }
-            }
-        }.onAppear { blocks = MarkdownParser.blocks(source) }
-            .onChange(of: source) { blocks = MarkdownParser.blocks($0) }
     }
 }
 struct MarkdownTable: View {
@@ -151,6 +189,9 @@ private struct MeasuredText: UIViewRepresentable {
         var markdown = false
         var style: UIUserInterfaceStyle = .unspecified
         var category: UIContentSizeCategory = .large
+        var width: CGFloat = 0
+        var color: UIColor?
+        var revision = 0
     }
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> UITextView {
@@ -164,8 +205,9 @@ private struct MeasuredText: UIViewRepresentable {
     }
     func updateUIView(_ view: UITextView, context: Context) {
         let cache = context.coordinator
-        let sameStyle = cache.size == size && cache.bold == bold && cache.markdown == markdown && cache.style == view.traitCollection.userInterfaceStyle && cache.category == view.traitCollection.preferredContentSizeCategory
-        if cache.text != text || !sameStyle {
+        let sameStyle = cache.size == size && cache.bold == bold && cache.markdown == markdown && cache.style == view.traitCollection.userInterfaceStyle && cache.category == view.traitCollection.preferredContentSizeCategory && cache.color == color
+        let changed = cache.text != text || !sameStyle
+        if changed {
             if !markdown && sameStyle && text.hasPrefix(cache.text) {
                 let suffix = String(text.dropFirst(cache.text.count))
                 view.textStorage.append(InlineMarkdown.render(suffix, size: CGFloat(size), color: color, bold: bold, enabled: false))
@@ -174,20 +216,26 @@ private struct MeasuredText: UIViewRepresentable {
             }
             cache.text = text; cache.size = size; cache.bold = bold; cache.markdown = markdown
             cache.style = view.traitCollection.userInterfaceStyle
-            cache.category = view.traitCollection.preferredContentSizeCategory
+            cache.category = view.traitCollection.preferredContentSizeCategory; cache.color = color
         }
-        let measured = ceil(view.sizeThatFits(CGSize(width: max(1, width), height: .greatestFiniteMagnitude)).height)
-        if abs(height - measured) > 0.5 { DispatchQueue.main.async { height = measured } }
+        guard width > 1, changed || abs(cache.width - width) > 0.5 else { return }
+        cache.width = width; cache.revision += 1
+        let revision = cache.revision
+        let measured = ceil(view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
+        if abs(height - measured) > 0.5 {
+            DispatchQueue.main.async { if cache.revision == revision { height = measured } }
+        }
     }
 }
 enum InlineMarkdown {
+    private static let pattern = "`([^`\n]+)`|\\[([^\\]]+)\\]\\((https?://[^\\s)]+|mailto:[^\\s)]+)\\)|\\*\\*(.+?)\\*\\*|(?<!\\*)\\*([^*\n]+)\\*(?!\\*)|__([^_\n]+)__|(?<![\\w_])_([^_\n]+)_(?![\\w_])"
+    private static let regex = try? NSRegularExpression(pattern: pattern)
     static func render(_ source: String, size: CGFloat, color: UIColor, bold: Bool, enabled: Bool) -> NSAttributedString {
         let base = UIFontMetrics(forTextStyle: .body).scaledFont(for: UIFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular))
         let baseAttributes: [NSAttributedString.Key: Any] = [.font: base, .foregroundColor: color]
         guard enabled else { return NSAttributedString(string: source, attributes: baseAttributes) }
         // One pass keeps code spans literal and avoids reinterpreting their contents as emphasis.
-        let pattern = "`([^`\n]+)`|\\[([^\\]]+)\\]\\((https?://[^\\s)]+|mailto:[^\\s)]+)\\)|\\*\\*(.+?)\\*\\*|(?<!\\*)\\*([^*\n]+)\\*(?!\\*)|__([^_\n]+)__|(?<![\\w_])_([^_\n]+)_(?![\\w_])"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return NSAttributedString(string: source, attributes: baseAttributes) }
+        guard let regex = regex else { return NSAttributedString(string: source, attributes: baseAttributes) }
         let input = source as NSString
         let result = NSMutableAttributedString(string: "")
         var cursor = 0

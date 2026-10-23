@@ -58,7 +58,7 @@ struct SettingsView: View {
                         Label("本地数据", systemImage: "externaldrive").font(.headline)
                         Text("\(store.conversations.count) 个会话 · 无登录 · 无遥测").font(.caption).foregroundColor(.secondary)
                         Button("导出全部会话 JSON") {
-                            do { sharing = try ShareFile.make(data: ExportService.json(store.conversations), ext: "json") }
+                            do { sharing = try ShareFile.make(data: ExportService.json(store.exportConversations()), ext: "json") }
                             catch { store.notice = error.localizedDescription }
                         }
                         Button("清空当前会话") { deletion = .conversation }.foregroundColor(.red)
