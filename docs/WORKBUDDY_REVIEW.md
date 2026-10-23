@@ -28,7 +28,7 @@
 - Chat Completions 是本版 Hub 传输协议；`/u/<ref>/v1` 路由前缀保留。
 - Hub Responses / 网关本地联网未接入。客户端 Search/Fetch 使用独立官方 DeepSeek Key；普通 Hub 聊天和本地时间/计算工具不要求 DeepSeek Key。
 - 模型目录不代表当前网关 Key 已获模型/区域/账号权限。不显示原始错误体，避免服务回显凭据进入界面或日志。
-- Bundle ID、Keychain service、providers.v1/conversations.v1/settings.v1/catalogs.v2 均保留。新增字段可选；补丁版本 2.0.3，不升级主版本。
+- Bundle ID、Keychain service、providers.v1/conversations.v1/settings.v1/catalogs.v2 均保留。新增字段可选；按维护者要求显示版本为 1.1，保留本次全部兼容修复。
 - 无新增运行时第三方依赖。默认分支保持已有状态，本次修改留在修复 PR 等待审核。
 
 CI 与产物的实际结果在修复 PR 中记录；真机待验证项见 DEVICE_TEST_MATRIX.md。Windows 源码检查不作为 Xcode 编译成功的证据。

@@ -48,4 +48,4 @@ Hub `/v1/responses` 与实验性网关本地 `web_search` / `web_fetch` 未接�
 
 ## 数据与验证
 
-Bundle ID、Keychain service、历史存储键、摘要、预设和工具设置保持不变。新增配置字段可选，兼容原 V2 和 PR #1 数据。补丁版本 2.0.3，没有升级到 3.0。源码/SDK 编译检查与 Mock 测试不能代替真实 Hub Key 和设备验证；待执行项见 [设备矩阵](DEVICE_TEST_MATRIX.md)。
+Bundle ID、Keychain service、历史存储键、摘要、预设和工具设置保持不变。新增配置字段可选，兼容原 V2 和 PR #1 数据。按维护者要求，应用显示版本为 1.1，保留本次全部兼容修复。源码/SDK 编译检查与 Mock 测试不能代替真实 Hub Key 和设备验证；待执行项见 [设备矩阵](DEVICE_TEST_MATRIX.md)。
