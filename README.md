@@ -28,6 +28,12 @@ Copyright (c) 2026 AkiSenn · [MIT](LICENSE) · [AUTHORS](AUTHORS.md) · [第三
 
 V2 Bundle ID 固定为 **com.akisenn.akichat**，V1 使用 `app.akichat.ios`。它们是独立 App/数据容器。先在 V1 导出全部聊天 JSON，再在 V2 会话抽屉中导入，并重新填写 API Key。没有跨容器自动迁移，也不卸载旧 App。完成备份前不要删除旧版。
 
+## 聊天性能与模型切换维护
+
+显示版本保留 1.1，构建号7。顶部主标题显示服务商名称，副标题显示当前真实模型 ID；点击直接按服务商分组选择模型。先展示本地缓存，刷新由用户主动触发，新配置保存后仍可自动发现。DeepSeek 默认 ID 仍为 deepseek-flash，其他模型以 /models 返回和手动配置为准。
+
+流式更新集中到当前消息；草稿独立更新并防抖保存；历史 Markdown 缓存、后台解析、原生文本测量缓存和后台图片缩略图减少高频工作。详见 [性能审查与验证边界](docs/PERFORMANCE_REVIEW.md)。没有声称已测得 iOS 16 真机 FPS 或优化百分比。
+
 ## WorkBuddy2API Hub 兼容修复
 
 可添加独立 WorkBuddy Provider，保存网关地址和管理面板生成的 Key 后自动获取模型。顶部模型面板按服务商分组，支持搜索、收藏与跨服务商切换；Hub 推理档位按目录适配，保留网关原始模型 ID。可信局域网 HTTP 需主动启用明文风险开关。
@@ -72,7 +78,7 @@ V2 Bundle ID 固定为 **com.akisenn.akichat**，V1 使用 `app.akichat.ios`。�
 | Base URL | `https://api.deepseek.com` |
 | Chat / Models | `/chat/completions` / `/models` |
 | API model ID | `deepseek-flash` |
-| 初始显示名称 | DeepSeek V4.1 Flash 1017 |
+| Provider 显示名称 | DeepSeek |
 | 推理强度 | high，可选 low / high / max |
 
 版本名称不是 API model ID。发现接口返回名称后优先展示服务端名称。支持根地址、/v1、完整 /v1/chat/completions 和手动端点路径，避免重复拼接。只接受无账号、查询参数和 fragment 的 HTTPS Base URL，保持系统 TLS 验证，拒绝重定向。

@@ -218,7 +218,8 @@ private struct MeasuredText: UIViewRepresentable {
             cache.style = view.traitCollection.userInterfaceStyle
             cache.category = view.traitCollection.preferredContentSizeCategory; cache.color = color
         }
-        guard width > 1, changed || abs(cache.width - width) > 0.5 else { return }
+        guard width > 1 else { cache.width = 0; return }
+        guard changed || abs(cache.width - width) > 0.5 else { return }
         cache.width = width; cache.revision += 1
         let revision = cache.revision
         let measured = ceil(view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)

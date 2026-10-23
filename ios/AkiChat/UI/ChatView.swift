@@ -68,8 +68,14 @@ struct ChatView: View {
     }
     private var header: some View {
         HStack(spacing: 12) {
-            IconButton(symbol: "line.horizontal.3", label: "会话抽屉") { withAnimation(.easeOut(duration: 0.22)) { showDrawer = true } }
-            Button { sheet = .models } label: {
+            IconButton(symbol: "line.horizontal.3", label: "会话抽屉") {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                withAnimation(.easeOut(duration: 0.22)) { showDrawer = true }
+            }
+            Button {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                sheet = .models
+            } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(store.providerName).font(.system(size: 16, weight: .semibold)).lineLimit(1)
                     HStack(spacing: 4) {

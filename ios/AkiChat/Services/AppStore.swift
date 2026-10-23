@@ -46,7 +46,11 @@ final class AppStore: ObservableObject {
     init(database suppliedDatabase: LocalDatabase? = nil, modelConfiguration: @escaping () -> URLSessionConfiguration = { .ephemeral }, senderFactory: @escaping () -> ChatRequestSending = { ChatTransport() }) {
         self.modelConfiguration = modelConfiguration; self.senderFactory = senderFactory
         do {
+            #if DEBUG
+            let db = try suppliedDatabase ?? Self.uiFixtureDatabase() ?? LocalDatabase()
+            #else
             let db = try suppliedDatabase ?? LocalDatabase()
+            #endif
             // Decode everything before enabling writes; never overwrite an unreadable store.
             providers = (try db.load("providers.v1", as: [Provider].self) ?? [.deepSeek, .openAI]).map(ProviderNaming.normalize)
             catalogs = try db.load("catalogs.v2", as: [ModelCatalog].self) ?? []

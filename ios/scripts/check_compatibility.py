@@ -10,7 +10,7 @@ FORBIDDEN = [r"\bNavigationStack\b", r"\bNavigationSplitView\b", r"\bPhotosPicke
 def main():
     project = (ROOT / "AkiChat.xcodeproj/project.pbxproj").read_text(encoding="utf-8")
     targets = re.findall(r'IPHONEOS_DEPLOYMENT_TARGET = "([^"]+)"', project)
-    assert len(targets) == 6 and set(targets) == {"14.0"}, targets
+    assert len(targets) == 8 and set(targets) == {"14.0"}, targets
     assert 'PRODUCT_BUNDLE_IDENTIFIER = "com.akisenn.akichat"' in project
     scheme = ET.parse(ROOT / "AkiChat.xcodeproj/xcshareddata/xcschemes/AkiChat.xcscheme")
     assert scheme.find(".//TestableReference/BuildableReference") is not None

@@ -5,15 +5,20 @@ struct ModelSelectionPanel: View {
     let dismiss: () -> Void
     @State private var query = ""
     @State private var favoritesOnly = false
+    private var matchingProviders: [Provider] {
+        store.providers.filter { provider in
+            query.isEmpty || provider.name.localizedCaseInsensitiveContains(query) || store.models(for: provider.id).contains { $0.id.localizedCaseInsensitiveContains(query) || $0.name.localizedCaseInsensitiveContains(query) }
+        }
+    }
     var body: some View {
         NavigationView {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    TextField("搜索模型或服务商", text: $query).padding(14).background(Theme.card).cornerRadius(14)
+                    TextField("搜索模型或服务商", text: $query).padding(14).background(Theme.card).cornerRadius(14).accessibilityIdentifier("model-search")
                     Toggle("只看收藏", isOn: $favoritesOnly).font(.subheadline)
                     NavigationLink("服务商与 API Key 管理", destination: ProvidersView().environmentObject(store)).frame(minHeight: 44)
                     if store.isGenerating { Text("请先停止生成，再切换模型。").font(.caption).foregroundColor(.orange) }
-                    ForEach(store.providers) { provider in
+                    ForEach(matchingProviders) { provider in
                         ProviderModelSection(provider: provider, query: query, favoritesOnly: favoritesOnly, dismiss: dismiss)
                     }
                 }.padding(18)
@@ -63,7 +68,7 @@ private struct ProviderModelSection: View {
                                 Image(systemName: "checkmark.circle.fill").foregroundColor(Theme.accent).accessibilityLabel("当前模型")
                             }
                         }.foregroundColor(.primary).padding(.vertical, 12).padding(.leading, 14)
-                    }.disabled(store.isGenerating)
+                    }.disabled(store.isGenerating).accessibilityIdentifier("choose-model-" + model.id)
                     Button {
                         var updated = model; updated.favorite.toggle(); store.saveModel(updated, providerID: provider.id)
                     } label: {
