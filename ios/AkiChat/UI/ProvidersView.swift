@@ -29,6 +29,10 @@ struct ProvidersView: View {
                     Label("添加 OpenAI 兼容服务商 / 模型", systemImage: "plus.circle.fill").padding()
                 }
                 Button("添加 OpenAI 预设") { var p = Provider.openAI; p.id = UUID(); p.apiKeyReference = UUID().uuidString; editing = p }
+                Button("添加 WorkBuddy2API Hub") {
+                    var p = Provider.workBuddy; p.id = UUID(); p.apiKeyReference = UUID().uuidString
+                    editing = p
+                }
                 Text("每个配置代表一个服务商与模型组合；同一地址可配置多个模型。密钥仅保存到 Keychain。自定义 Header 只用于非敏感元数据。")
                     .font(.caption).foregroundColor(.secondary)
             }.padding(18)
@@ -67,8 +71,16 @@ struct ProviderEditor: View {
                         Picker("适配方式", selection: $provider.kind) {
                             Text("OpenAI 兼容").tag(ProviderKind.openAI)
                             Text("DeepSeek 官方格式").tag(ProviderKind.deepSeek)
+                            Text("WorkBuddy2API Hub").tag(ProviderKind.workBuddy)
                         }.pickerStyle(SegmentedPickerStyle())
                         Text("支持填写根地址、/v1 或完整 /chat/completions 路径。").font(.caption).foregroundColor(.secondary)
+                        if provider.kind == .workBuddy {
+                            Toggle("允许本地 HTTP（仅局域网）", isOn: Binding(
+                                get: { provider.options.workBuddy?.allowLANHTTP ?? false },
+                                set: { var options = provider.options; var hub = options.workBuddy ?? WorkBuddyOptions(); hub.allowLANHTTP = $0; options.workBuddy = hub; provider.options = options }
+                            ))
+                            Text("推荐 HTTPS 反代。局域网 HTTP 可能泄漏 API Key，仅允许可信网络；iOS ATS 仍可能要求局部例外。").font(.caption).foregroundColor(.secondary)
+                        }
                     }
                     Card {
                         Text("API Key").font(.headline)
@@ -80,7 +92,7 @@ struct ProviderEditor: View {
                     Card {
                         Text("模型能力").font(.headline)
                         Toggle("支持图片理解", isOn: $provider.supportsVision)
-                        Toggle("支持深度思考（DeepSeek 适配）", isOn: $provider.supportsThinking)
+                        Toggle("支持深度思考", isOn: $provider.supportsThinking)
                         Toggle("支持流式响应", isOn: $provider.supportsStreaming)
                         Toggle("请求流式 Token usage 扩展", isOn: $provider.requestsStreamingUsage)
                         Toggle("支持 Function Calling", isOn: $provider.options.supportsTools)
@@ -95,7 +107,7 @@ struct ProviderEditor: View {
                         Stepper("超时：\(Int(provider.options.timeout)) 秒", value: $provider.options.timeout, in: 10...300, step: 10)
                         Stepper("上下文：\(provider.options.contextWindow) tokens", value: $provider.options.contextWindow, in: 4096...1048576, step: 4096)
                         Stepper("最大输出：\(provider.options.outputLimit) tokens", value: $provider.options.outputLimit, in: 256...131072, step: 256)
-                        Text("非 DeepSeek 适配不会发送 thinking 与 reasoning_effort 字段。").font(.caption).foregroundColor(.secondary)
+                        Text("Hub 发送标准 reasoning_effort，不发送 DeepSeek 私有 thinking；其他 OpenAI 兼容服务商默认不发送两者。").font(.caption).foregroundColor(.secondary)
                         Text("自定义非敏感 Headers（JSON 对象）").font(.caption)
                         TextEditor(text: $headers).frame(height: 80).font(.system(size: 12, design: .monospaced))
                     }
@@ -130,7 +142,7 @@ struct ProviderEditor: View {
         result.name = result.name.trimmingCharacters(in: .whitespacesAndNewlines)
         result.modelID = result.modelID.trimmingCharacters(in: .whitespacesAndNewlines)
         result.displayName = result.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        _ = try Endpoint.chatURL(result.baseURL)
+        _ = try Endpoint.chatURL(result.baseURL, path: result.options.chatPath, allowLANHTTP: result.kind == .workBuddy && (result.options.workBuddy?.allowLANHTTP ?? false))
         let data = Data((headers.isEmpty ? "{}" : headers).utf8)
         guard let value = try JSONSerialization.jsonObject(with: data) as? [String: String], value.keys.allSatisfy(RequestBuilder.safeHeader) else {
             throw AppError.validation("Header 必须是字符串 JSON 对象，且不得包含认证、Cookie、Key、Token 或 Secret。")

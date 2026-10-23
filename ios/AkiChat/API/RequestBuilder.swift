@@ -1,14 +1,16 @@
 import Foundation
 
 enum Endpoint {
-    static func chatURL(_ input: String, path: String = "/chat/completions", beta: Bool = false) throws -> URL {
-        try url(input, path: path, beta: beta)
+    static func chatURL(_ input: String, path: String = "/chat/completions", beta: Bool = false, allowLANHTTP: Bool = false) throws -> URL {
+        try url(input, path: path, beta: beta, allowLANHTTP: allowLANHTTP)
     }
-    static func url(_ input: String, path endpoint: String, beta: Bool = false) throws -> URL {
+    static func url(_ input: String, path endpoint: String, beta: Bool = false, allowLANHTTP: Bool = false) throws -> URL {
         guard var parts = URLComponents(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
-              parts.scheme?.lowercased() == "https", let host = parts.host, !host.isEmpty,
+              let host = parts.host, !host.isEmpty,
+              (parts.scheme?.lowercased() == "https" ||
+                (parts.scheme?.lowercased() == "http" && allowLANHTTP && privateLANHost(host))),
               parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil else {
-            throw AppError.validation("Base URL 必须是无账号、查询参数和片段的 HTTPS 地址。")
+            throw AppError.validation("请使用 HTTPS；WorkBuddy 局域网 HTTP 仅允许在明确授权后连接私有地址。")
         }
         var path = parts.path
         while path.hasSuffix("/") { path.removeLast() }
@@ -24,6 +26,19 @@ enum Endpoint {
         parts.path = path
         guard let url = parts.url else { throw AppError.validation("API 地址无效") }
         return url
+    }
+    private static func privateLANHost(_ hostname: String) -> Bool {
+        let host = hostname.lowercased()
+        if host == "localhost" || host == "::1" || host.hasSuffix(".local") || host.hasPrefix("fe80:") { return true }
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        let octets = parts.compactMap { UInt8($0) }
+        guard octets.count == 4 else { return false }
+        return octets[0] == 10 ||
+            (octets[0] == 172 && (16...31).contains(octets[1])) ||
+            (octets[0] == 192 && octets[1] == 168) ||
+            (octets[0] == 169 && octets[1] == 254) ||
+            octets[0] == 127
     }
 }
 
@@ -81,7 +96,7 @@ enum RequestBuilder {
                     entry["tool_calls"] = calls.map { ["id": $0.id, "type": $0.type, "function": ["name": $0.function.name, "arguments": $0.function.arguments]] }
                     if message.content.isEmpty { entry["content"] = NSNull() }
                 }
-                if provider.kind == .deepSeek { entry["reasoning_content"] = message.reasoning }
+                if provider.kind == .deepSeek || provider.kind == .workBuddy { entry["reasoning_content"] = message.reasoning }
             }
             if message.role == .tool { entry["tool_call_id"] = message.toolCallID ?? "" }
             messages.append(entry)
@@ -96,7 +111,18 @@ enum RequestBuilder {
             body["thinking"] = ["type": conversation.thinking ? "enabled" : "disabled"]
             if conversation.thinking { body["reasoning_effort"] = conversation.effort.rawValue }
         }
-        let sampling = provider.options.sendSamplingParameters ?? !officialOpenAI
+        if provider.kind == .workBuddy && provider.supportsThinking {
+            let hub = provider.options.workBuddy ?? WorkBuddyOptions()
+            if conversation.thinking {
+                let chosen = conversation.effort.rawValue
+                body["reasoning_effort"] = hub.reasoningEfforts.isEmpty || hub.reasoningEfforts.contains(chosen)
+                    ? chosen : (hub.defaultEffort ?? hub.reasoningEfforts[0])
+            } else if hub.canDisableThinking == true {
+                body["reasoning_effort"] = "none"
+            }
+            // The Hub accepts the standard reasoning_effort field; never send DeepSeek's thinking object.
+        }
+        let sampling = provider.options.sendSamplingParameters ?? (provider.kind != .workBuddy && !officialOpenAI)
         if sampling && !(provider.kind == .deepSeek && provider.supportsThinking && conversation.thinking) {
             body["temperature"] = min(2, max(0, settings.temperature))
         }
@@ -106,7 +132,8 @@ enum RequestBuilder {
         if stream && provider.requestsStreamingUsage { body["stream_options"] = ["include_usage": true] }
         let data = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         guard data.count <= 48 * 1024 * 1024 else { throw AppError.validation("请求体超过 48 MiB，请减少上下文或图片。") }
-        var request = URLRequest(url: try Endpoint.chatURL(provider.baseURL, path: provider.options.chatPath, beta: prefix))
+        var request = URLRequest(url: try Endpoint.chatURL(provider.baseURL, path: provider.options.chatPath, beta: prefix,
+            allowLANHTTP: provider.kind == .workBuddy && (provider.options.workBuddy?.allowLANHTTP ?? false)))
         request.httpMethod = "POST"
         request.timeoutInterval = min(300, max(10, provider.options.timeout))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

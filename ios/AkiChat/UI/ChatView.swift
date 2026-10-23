@@ -168,7 +168,7 @@ struct ChatView: View {
                     .disabled(store.isGenerating || store.provider?.supportsVision != true)
                     .accessibilityLabel("从相册添加图片")
                     .accessibilityHint(store.provider?.supportsVision == true ? "最多四张" : "当前模型不支持图片，请切换模型")
-                if store.provider?.supportsThinking == true && store.provider?.kind == .deepSeek {
+                if store.provider?.supportsThinking == true && (store.provider?.kind == .deepSeek || store.provider?.kind == .workBuddy) {
                     Button { store.setThinking(!store.thinking) } label: {
                         Label("深度思考", systemImage: "sparkles").font(.system(size: 12, weight: .medium))
                             .padding(.horizontal, 10).padding(.vertical, 7)

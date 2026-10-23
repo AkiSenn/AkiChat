@@ -132,7 +132,7 @@ final class AppStore: ObservableObject {
         guard let p = providers.first(where: { $0.id == id }), !refreshingModels.contains(id) else { return }
         if onlyIfNeeded && (catalogs.first(where: { $0.id == id })?.syncedAt != nil || (try? KeychainStore.read(p.apiKeyReference)) == nil) { return }
         do {
-            let request = try JSONHTTPClient.request(url: Endpoint.url(p.baseURL, path: p.options.modelsPath), key: KeychainStore.read(p.apiKeyReference) ?? "", timeout: p.options.timeout, headers: p.customHeaders)
+            let request = try JSONHTTPClient.request(url: Endpoint.url(p.baseURL, path: p.options.modelsPath, allowLANHTTP: p.kind == .workBuddy && (p.options.workBuddy?.allowLANHTTP ?? false)), key: KeychainStore.read(p.apiKeyReference) ?? "", timeout: p.options.timeout, headers: p.customHeaders)
             let client = JSONHTTPClient(); modelRequests[id] = client; refreshingModels.insert(id); modelErrors[id] = nil
             client.start(request) { [weak self] result in
                 guard let self = self, self.modelRequests[id] === client else { return }
@@ -175,7 +175,7 @@ final class AppStore: ObservableObject {
         // Validate configuration before clearing the persisted draft.
         do {
             guard let p = provider, !p.modelID.isEmpty else { throw AppError.validation("请先选择模型") }
-            _ = try JSONHTTPClient.request(url: Endpoint.chatURL(p.baseURL, path: p.options.chatPath), key: KeychainStore.read(p.apiKeyReference) ?? "")
+            _ = try JSONHTTPClient.request(url: Endpoint.chatURL(p.baseURL, path: p.options.chatPath, allowLANHTTP: p.kind == .workBuddy && (p.options.workBuddy?.allowLANHTTP ?? false)), key: KeychainStore.read(p.apiKeyReference) ?? "")
             if !draftImages.isEmpty && !p.supportsVision { throw AppError.validation("当前模型不支持图片，请切换模型或移除附件。") }
         } catch { notice = error.localizedDescription; return }
         let user = Message(role: .user, content: text, images: draftImages)
@@ -313,7 +313,7 @@ final class AppStore: ObservableObject {
         persist(immediate: true)
     }
     func saveProvider(_ value: Provider, newKey: String?, deleteKey: Bool = false) throws {
-        _ = try Endpoint.chatURL(value.baseURL)
+        _ = try Endpoint.chatURL(value.baseURL, path: value.options.chatPath, allowLANHTTP: value.kind == .workBuddy && (value.options.workBuddy?.allowLANHTTP ?? false))
         guard !value.name.isEmpty, !value.displayName.isEmpty else { throw AppError.validation("请填写服务商名称与显示名称") }
         guard value.customHeaders.keys.allSatisfy(RequestBuilder.safeHeader) else { throw AppError.validation("自定义 Header 只能包含非敏感字段") }
         guard database != nil else { throw AppError.storage("数据库不可用，无法保存配置") }

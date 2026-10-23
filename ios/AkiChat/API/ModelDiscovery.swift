@@ -8,22 +8,26 @@ enum ModelDiscovery {
         return rows.compactMap { row in
             guard let id = row["id"] as? String, !id.isEmpty, id.count <= 256, ids.insert(id).inserted else { return nil }
             var model = ModelRecord(id: id, name: row["name"] as? String ?? id)
-            model.contextWindow = (row["context_window"] as? Int).flatMap { $0 > 0 ? $0 : nil }
+            model.contextWindow = (row["context_window"] as? Int ?? row["context_length"] as? Int ?? row["max_input_tokens"] as? Int).flatMap { $0 > 0 ? $0 : nil }
             model.outputLimit = (row["max_output_tokens"] as? Int).flatMap { $0 > 0 ? $0 : nil }
             model.inputModalities = row["input_modalities"] as? [String] ?? []
             model.outputModalities = row["output_modalities"] as? [String] ?? []
-            model.effort = (row["effort"] as? [String: Any])?["supported_levels"] as? [String] ?? []
+            model.effort = row["reasoning_efforts"] as? [String] ?? (row["effort"] as? [String: Any])?["supported_levels"] as? [String] ?? []
             let caps = row["api_capabilities"] as? [String: Any] ?? [:]
             let chatCaps = caps["chat_completions"] as? [String: Any] ?? caps
-            model.discovered.vision = row["input_modalities"] == nil ? nil : model.inputModalities.contains("image")
-            model.discovered.thinking = row["effort"] == nil ? nil : !model.effort.isEmpty
-            model.discovered.tools = chatCaps["function_calling"] as? Bool ?? chatCaps["tools"] as? Bool
+            model.discovered.vision = row["supports_vision"] as? Bool ?? (row["capabilities"] as? [String: Any])?["vision"] as? Bool ??
+                (row["input_modalities"] == nil ? nil : model.inputModalities.contains("image"))
+            model.discovered.thinking = row["supports_reasoning"] as? Bool ?? (row["capabilities"] as? [String: Any])?["reasoning"] as? Bool ??
+                (model.effort.isEmpty && row["reasoning_fixed_effort"] == nil ? nil : true)
+            model.discovered.tools = row["supports_tools"] as? Bool ?? (row["capabilities"] as? [String: Any])?["tools"] as? Bool ??
+                chatCaps["function_calling"] as? Bool ?? chatCaps["tools"] as? Bool
             model.discovered.streaming = chatCaps["streaming"] as? Bool
             model.discovered.systemPrompt = chatCaps["system_prompt"] as? Bool
             if provider.kind == .deepSeek && id == "deepseek-flash" {
                 model.discovered.tools = true; model.discovered.prefix = true // documented official preset
             }
-            if let encoded = try? JSONSerialization.data(withJSONObject: caps, options: [.sortedKeys]) { model.metadata = String(decoding: encoded, as: UTF8.self) }
+            let metadataSource: [String: Any] = provider.kind == .workBuddy ? row : caps
+            if let encoded = try? JSONSerialization.data(withJSONObject: metadataSource, options: [.sortedKeys]) { model.metadata = String(decoding: encoded, as: UTF8.self) }
             return model
         }
     }

@@ -2,6 +2,14 @@ import Foundation
 
 enum OutputTokenField: String, Codable, CaseIterable { case maxTokens = "max_tokens", maxCompletionTokens = "max_completion_tokens" }
 
+/// WorkBuddy2API-Hub-specific options. Optional on ProviderOptions to keep older persisted data decodable.
+struct WorkBuddyOptions: Codable, Equatable {
+    var allowLANHTTP = false
+    var reasoningEfforts: [String] = []
+    var defaultEffort: String?
+    var canDisableThinking: Bool?
+}
+
 struct ProviderOptions: Codable, Equatable {
     var chatPath = "/chat/completions"
     var modelsPath = "/models"
@@ -17,6 +25,7 @@ struct ProviderOptions: Codable, Equatable {
     var sendSamplingParameters: Bool?
     var modelSystemPrompt: String?
     var modelPresetIDs: [UUID]?
+    var workBuddy: WorkBuddyOptions?
 }
 extension Provider {
     var options: ProviderOptions {
@@ -24,11 +33,13 @@ extension Provider {
             if let advanced = advanced { return advanced }
             var value = ProviderOptions()
             if kind == .deepSeek { value.supportsTools = true; value.supportsPrefix = true; value.contextWindow = 1048576; value.outputLimit = 32768 }
+            if kind == .workBuddy { value.supportsTools = true; value.tokenLimitField = .maxTokens; value.sendSamplingParameters = false; value.workBuddy = WorkBuddyOptions() }
             return value
         }
         set { advanced = newValue }
     }
     static let openAI = Provider(name: "OpenAI", baseURL: "https://api.openai.com/v1", modelID: "", displayName: "手动选择 OpenAI 模型")
+    static let workBuddy = Provider(name: "WorkBuddy2API Hub", baseURL: "https://", modelID: "", displayName: "请选择 WorkBuddy 模型", kind: .workBuddy, requestsStreamingUsage: true)
 }
 
 struct ModelCapabilities: Codable, Equatable {
@@ -71,6 +82,14 @@ struct ModelRecord: Codable, Identifiable, Equatable {
         options.outputLimit = outputLimitOverride ?? outputLimit ?? base.options.outputLimit
         options.modelSystemPrompt = systemPrompt
         options.modelPresetIDs = presetIDs
+        if result.kind == .workBuddy {
+            let raw = (try? JSONSerialization.jsonObject(with: Data(metadata.utf8))) as? [String: Any] ?? [:]
+            var hub = options.workBuddy ?? WorkBuddyOptions()
+            hub.reasoningEfforts = effort
+            hub.defaultEffort = raw["reasoning_default_effort"] as? String
+            hub.canDisableThinking = raw["reasoning_can_disable"] as? Bool
+            options.workBuddy = hub
+        }
         result.options = options
         return result
     }
