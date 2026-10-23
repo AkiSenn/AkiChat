@@ -1,7 +1,7 @@
 import Foundation
 
-enum ProviderKind: String, Codable, CaseIterable { case deepSeek, openAI }
-enum ReasoningEffort: String, Codable, CaseIterable { case low, high, max }
+enum ProviderKind: String, Codable, CaseIterable { case deepSeek, openAI, workBuddy }
+enum ReasoningEffort: String, Codable, CaseIterable { case low, medium, high, max }
 enum AppearanceMode: String, Codable, CaseIterable { case automatic, light, dark }
 
 struct Provider: Codable, Identifiable, Equatable {
