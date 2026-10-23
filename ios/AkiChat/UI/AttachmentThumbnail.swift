@@ -1,5 +1,6 @@
 import SwiftUI
 import ImageIO
+import UIKit
 
 final class ThumbnailLoader: ObservableObject {
     @Published private(set) var image: UIImage?
@@ -8,6 +9,7 @@ final class ThumbnailLoader: ObservableObject {
     }()
     private static let queue = DispatchQueue(label: "com.akisenn.akichat.thumbnails", qos: .userInitiated)
     private var request = UUID()
+    func release() { request = UUID(); image = nil }
     func load(_ attachment: Attachment, maxPixel: Int) {
         let token = UUID(); request = token
         Self.queue.async { [weak self] in
@@ -32,5 +34,6 @@ struct AttachmentThumbnail: View {
             else { RoundedRectangle(cornerRadius: 10).fill(Theme.card).aspectRatio(CGFloat(max(1, attachment.width)) / CGFloat(max(1, attachment.height)), contentMode: .fit).overlay(ProgressView()) }
         }.onAppear { loader.load(attachment, maxPixel: maxPixel) }
             .onChange(of: attachment.id) { _ in loader.load(attachment, maxPixel: maxPixel) }
+            .onDisappear { loader.release() }
     }
 }

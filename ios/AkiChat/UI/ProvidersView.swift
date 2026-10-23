@@ -62,9 +62,9 @@ struct ProviderEditor: View {
                 VStack(spacing: 16) {
                     Card {
                         field("服务商名称", text: $provider.name)
-                        field("显示名称", text: $provider.displayName)
+                        field("默认模型显示名称", text: $provider.displayName)
                         field(provider.kind == .workBuddy ? "网关 Base URL（建议包含 /v1）" : "Base URL（HTTPS）", text: $provider.baseURL)
-                        field("API 模型 ID", text: $provider.modelID)
+                        field("默认 API 模型 ID", text: $provider.modelID)
                         field("Chat Completions 路径", text: $provider.options.chatPath)
                         field("Models 路径", text: $provider.options.modelsPath)
                         Picker("适配方式", selection: $provider.kind) {
@@ -122,7 +122,7 @@ struct ProviderEditor: View {
                         if !status.isEmpty { Text(status).font(.footnote).foregroundColor(.secondary) }
                     }
                 }.padding(18)
-            }.background(Theme.background).navigationTitle("配置模型").navigationBarTitleDisplayMode(.inline)
+            }.background(Theme.background).navigationTitle("配置服务商").navigationBarTitleDisplayMode(.inline)
                 .navigationBarItems(leading: Button("取消") { cancelTest(); presentation.wrappedValue.dismiss() }, trailing: Button("保存") { save() }.disabled(testing))
         }.navigationViewStyle(StackNavigationViewStyle())
             .onAppear {

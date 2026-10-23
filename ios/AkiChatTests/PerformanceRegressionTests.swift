@@ -128,6 +128,21 @@ final class PerformanceRegressionTests: XCTestCase {
             for i in 0..<200 { messages[messages.count - 1].content = "tick \(i)"; presentation.receive(messages) }
         }
     }
+    func testThumbnailDownsamplesAndReleasesOffscreenImage() throws {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 400)).image { context in
+            UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 600, height: 400))
+        }
+        let data = try XCTUnwrap(image.jpegData(compressionQuality: 0.7))
+        let attachment = Attachment(jpeg: data, width: 600, height: 400)
+        let loader = ThumbnailLoader()
+        let loaded = expectation(description: "downsampled image")
+        let sink = loader.$image.dropFirst().sink { image in if image != nil { loaded.fulfill() } }
+        loader.load(attachment, maxPixel: 120)
+        wait(for: [loaded], timeout: 3)
+        XCTAssertLessThanOrEqual(loader.image?.cgImage?.width ?? 1000, 120)
+        loader.release(); XCTAssertNil(loader.image)
+        withExtendedLifetime(sink) {}
+    }
 }
 
 private final class PerformanceSender: ChatRequestSending {
