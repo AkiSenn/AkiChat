@@ -207,14 +207,19 @@ final class RetrySafetyTests: XCTestCase {
         let done = expectation(description: "partial response preserved")
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [MockURLProtocol.self]
         var calls = 0; var content = ""
+        var disconnect: (() -> Void)?
         MockURLProtocol.handler = { request, client, proto in
             calls += 1
+            disconnect = { client.urlProtocol(proto, didFailWithError: URLError(.networkConnectionLost)) }
             client.urlProtocol(proto, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
             client.urlProtocol(proto, didLoad: Data("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n".utf8))
-            client.urlProtocol(proto, didFailWithError: URLError(.networkConnectionLost))
         }
         let transport = ChatTransport()
-        transport.start(request: URLRequest(url: URL(string: "https://mock.invalid")!), stream: true, configuration: config, onUpdate: { content = $0.content }) { result in
+        transport.start(request: URLRequest(url: URL(string: "https://mock.invalid")!), stream: true, configuration: config, onUpdate: {
+            content = $0.content
+            // Fail only after actual delegate delivery; URLProtocol may discard buffered data on immediate failure.
+            if content == "partial" { let failure = disconnect; disconnect = nil; failure?() }
+        }) { result in
             if case .success = result { XCTFail("Must report interrupted stream") }
             XCTAssertEqual(calls, 1); XCTAssertEqual(content, "partial"); done.fulfill()
         }
