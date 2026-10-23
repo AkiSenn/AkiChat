@@ -28,6 +28,12 @@ Copyright (c) 2026 AkiSenn · [MIT](LICENSE) · [AUTHORS](AUTHORS.md) · [第三
 
 V2 Bundle ID 固定为 **com.akisenn.akichat**，V1 使用 `app.akichat.ios`。它们是独立 App/数据容器。先在 V1 导出全部聊天 JSON，再在 V2 会话抽屉中导入，并重新填写 API Key。没有跨容器自动迁移，也不卸载旧 App。完成备份前不要删除旧版。
 
+## WorkBuddy2API Hub 兼容修复
+
+可添加独立 WorkBuddy Provider，保存网关地址和管理面板生成的 Key 后自动获取模型。顶部模型面板按服务商分组，支持搜索、收藏与跨服务商切换；Hub 推理档位按目录适配，保留网关原始模型 ID。可信局域网 HTTP 需主动启用明文风险开关。
+
+详细设置、推理/工具/搜索边界、429 退避与审查依据见 [接入教程](docs/WORKBUDDY_HUB.md) 和 [PR #1 审查记录](docs/WORKBUDDY_REVIEW.md)。Hub Responses 联网未接入；当前客户端联网使用单独的官方 DeepSeek Key，普通 Hub 聊天不要求它。
+
 ## 开始使用
 
 1. 空白聊天页“配置你的 API”，或左侧会话抽屉底部“应用设置” → “模型与 API Key”。

@@ -17,7 +17,8 @@ def main():
     with (ROOT / "AkiChat/Info.plist").open("rb") as f:
         info = plistlib.load(f)
     assert info["LSRequiresIPhoneOS"] and info["CFBundleExecutable"] == "$(EXECUTABLE_NAME)"
-    assert "NSAppTransportSecurity" not in info
+    assert info.get("NSAppTransportSecurity") == {"NSAllowsLocalNetworking": True}
+    assert info.get("NSLocalNetworkUsageDescription")
     for path in (ROOT / "AkiChat").rglob("*.swift"):
         text = path.read_text(encoding="utf-8")
         for pattern in FORBIDDEN:

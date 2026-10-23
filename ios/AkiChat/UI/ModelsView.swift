@@ -9,8 +9,7 @@ struct ModelsView: View {
     @State private var editing: ModelRecord?
     @State private var deleting: ModelRecord?
     var sorted: [ModelRecord] {
-        store.models(for: providerID).filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || $0.id.localizedCaseInsensitiveContains(query) }
-            .sorted { a, b in a.favorite != b.favorite ? a.favorite : (a.order != b.order ? a.order < b.order : a.name.localizedStandardCompare(b.name) == .orderedAscending) }
+        ModelDiscovery.filtered(store.models(for: providerID), query: query)
     }
     var body: some View {
         ScrollView {
@@ -87,7 +86,7 @@ struct ModelEditor: View {
                         capability("流式", path: \.streaming)
                         capability("System Prompt", path: \.systemPrompt)
                         capability("Assistant Prefix", path: \.prefix)
-                        Text("思考和前缀的特殊协议目前仅由 DeepSeek 适配层发送。").font(.caption).foregroundColor(.secondary)
+                        Text("思考参数由服务商适配层发送；WorkBuddy 使用模型目录档位，Prefix 仅支持 DeepSeek 官方。").font(.caption).foregroundColor(.secondary)
                     }
                     Card {
                         Text("模型级 System Prompt").font(.headline)

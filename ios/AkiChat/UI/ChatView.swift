@@ -82,7 +82,7 @@ struct ChatView: View {
             }
             Spacer(minLength: 0)
             IconButton(symbol: "square.and.pencil", label: "新建对话") { store.newConversation() }
-        }.padding(.horizontal, 18).padding(.vertical, 12).background(BlurView())
+        }.padding(.horizontal, 18).padding(.vertical, 12).background(Theme.background)
     }
     private var messageList: some View {
         ScrollViewReader { proxy in
@@ -169,10 +169,13 @@ struct ChatView: View {
                     .accessibilityLabel("从相册添加图片")
                     .accessibilityHint(store.provider?.supportsVision == true ? "最多四张" : "当前模型不支持图片，请切换模型")
                 if store.provider?.supportsThinking == true && (store.provider?.kind == .deepSeek || store.provider?.kind == .workBuddy) {
-                    Button { store.setThinking(!store.thinking) } label: {
-                        Label("深度思考", systemImage: "sparkles").font(.system(size: 12, weight: .medium))
+                    Button {
+                        if let provider = store.provider, provider.kind == .workBuddy && !HubReasoning.canDisable(provider) { sheet = .advanced }
+                        else { store.setThinking(!store.thinking) }
+                    } label: {
+                        Label(thinkingLabel, systemImage: "sparkles").font(.system(size: 12, weight: .medium))
                             .padding(.horizontal, 10).padding(.vertical, 7)
-                            .background(store.thinking ? Theme.accent.opacity(0.12) : Color.secondary.opacity(0.08)).cornerRadius(12)
+                            .background(thinkingActive ? Theme.accent.opacity(0.12) : Color.secondary.opacity(0.08)).cornerRadius(12)
                     }.frame(minHeight: 44).disabled(store.isGenerating)
                 }
                 Button {
@@ -194,34 +197,18 @@ struct ChatView: View {
             .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.primary.opacity(0.04)))
             .padding(.horizontal, 14).padding(.bottom, 8)
     }
-    private var modelPicker: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(store.providers) { provider in
-                        NavigationLink(destination: ModelsView(providerID: provider.id, selecting: true, onSelect: { sheet = nil }).environmentObject(store)) {
-                            Label("\(provider.name) · 模型库与发现", systemImage: "square.stack")
-                        }.frame(minHeight: 44)
-                        Button {
-                            store.selectProvider(provider.id); sheet = nil
-                        } label: {
-                            Card {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(provider.displayName).font(.headline)
-                                        Text("\(provider.name) · \(provider.modelID)").font(.caption).foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    if store.provider?.id == provider.id { Image(systemName: "checkmark.circle.fill").foregroundColor(Theme.accent) }
-                                }
-                            }.foregroundColor(.primary)
-                        }.disabled(store.isGenerating)
-                    }
-                }.padding()
-            }.background(Theme.background).navigationTitle("选择模型")
-                .navigationBarItems(trailing: Button("完成") { sheet = nil })
-        }.navigationViewStyle(StackNavigationViewStyle())
+    private var thinkingActive: Bool {
+        if let p = store.provider, p.kind == .workBuddy { return store.thinking || !HubReasoning.canDisable(p) }
+        return store.thinking
     }
+    private var thinkingLabel: String {
+        guard let p = store.provider, p.kind == .workBuddy, let c = store.current else { return "深度思考" }
+        return "思考 · " + (HubReasoning.resolve(provider: p, conversation: c) ?? "默认")
+    }
+    private var modelPicker: some View {
+        ModelSelectionPanel(dismiss: { sheet = nil }).environmentObject(store)
+    }
+
 }
 
 private struct MessageHeightKey: PreferenceKey {

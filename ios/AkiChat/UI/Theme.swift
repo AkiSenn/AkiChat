@@ -2,7 +2,7 @@ import SwiftUI
 
 enum Theme {
     static let accent = Color(red: 0.22, green: 0.38, blue: 0.91)
-    static let background = Color(UIColor.systemGroupedBackground)
+    static let background = Color(UIColor { $0.userInterfaceStyle == .dark ? .black : .systemGroupedBackground })
     static let card = Color(UIColor.secondarySystemGroupedBackground)
 }
 struct BlurView: UIViewRepresentable {

@@ -20,6 +20,7 @@ final class AppStore: ObservableObject {
     private var run: ChatRun?
     private var compression: Cancellable?
     private var modelRequests: [UUID: JSONHTTPClient] = [:]
+    private let modelConfiguration: () -> URLSessionConfiguration
     private var generationID: UUID?
     private var saveWork: DispatchWorkItem?
     private var lastCheckpoint = Date.distantPast
@@ -29,7 +30,8 @@ final class AppStore: ObservableObject {
     var provider: Provider? {
         guard let base = providers.first(where: { $0.id == current?.providerID }) else { return nil }
         let id = current?.options.modelID ?? base.modelID
-        return models(for: base.id).first(where: { $0.id == id })?.apply(to: base) ?? base
+        guard let model = models(for: base.id).first(where: { $0.id == id }) else { return nil }
+        return model.apply(to: base)
     }
     var messages: [Message] { current?.messages ?? [] }
     var draft: String { current?.draft ?? "" }
@@ -41,7 +43,8 @@ final class AppStore: ObservableObject {
         let rect = ((draft.isEmpty ? " " : draft) as NSString).boundingRect(with: CGSize(width: width, height: 1000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: UIFont.systemFont(ofSize: 16)], context: nil)
         return min(140, max(42, ceil(rect.height) + 20))
     }
-    init(database suppliedDatabase: LocalDatabase? = nil) {
+    init(database suppliedDatabase: LocalDatabase? = nil, modelConfiguration: @escaping () -> URLSessionConfiguration = { .ephemeral }) {
+        self.modelConfiguration = modelConfiguration
         do {
             let db = try suppliedDatabase ?? LocalDatabase()
             // Decode everything before enabling writes; never overwrite an unreadable store.
@@ -101,7 +104,7 @@ final class AppStore: ObservableObject {
     func selectConversation(_ id: UUID) { stop(); selectedID = id; renderRevision += 1 }
     func selectProvider(_ id: UUID) { guard !isGenerating else { return }; mutate { $0.providerID = id; $0.options.modelID = nil }; persist() }
     func selectModel(providerID: UUID, modelID: String) {
-        guard !isGenerating else { return }
+        guard !isGenerating, providers.contains(where: { $0.id == providerID }), models(for: providerID).contains(where: { $0.id == modelID }) else { return }
         mutate { $0.providerID = providerID; $0.options.modelID = modelID; $0.options.context.calibration = nil }; persist()
     }
     func models(for providerID: UUID) -> [ModelRecord] {
@@ -134,7 +137,7 @@ final class AppStore: ObservableObject {
         do {
             let request = try JSONHTTPClient.request(url: Endpoint.url(p.baseURL, path: p.options.modelsPath, allowLANHTTP: p.kind == .workBuddy && (p.options.workBuddy?.allowLANHTTP ?? false)), key: KeychainStore.read(p.apiKeyReference) ?? "", timeout: p.options.timeout, headers: p.customHeaders)
             let client = JSONHTTPClient(); modelRequests[id] = client; refreshingModels.insert(id); modelErrors[id] = nil
-            client.start(request) { [weak self] result in
+            client.start(request, configuration: modelConfiguration()) { [weak self] result in
                 guard let self = self, self.modelRequests[id] === client else { return }
                 self.modelRequests[id] = nil; self.refreshingModels.remove(id)
                 do {
@@ -322,7 +325,7 @@ final class AppStore: ObservableObject {
         var next = providers
         if let i = next.firstIndex(where: { $0.id == value.id }) { next[i] = value } else { next.append(value) }
         providers = next; persist(immediate: true)
-        if newKey?.isEmpty == false && !deleteKey { refreshModels(value.id) }
+        if !deleteKey { refreshModels(value.id) }
     }
     func deleteProvider(_ id: UUID) throws {
         guard providers.count > 1 else { throw AppError.validation("请至少保留一个服务商") }
@@ -332,7 +335,10 @@ final class AppStore: ObservableObject {
         let next = providers.filter { $0.id != id }
         try KeychainStore.delete(value.apiKeyReference)
         providers = next
-        for i in conversations.indices where conversations[i].providerID == id { conversations[i].providerID = next[0].id }
+        for i in conversations.indices where conversations[i].providerID == id {
+            conversations[i].providerID = next[0].id; conversations[i].options.modelID = nil
+            conversations[i].options.context.calibration = nil
+        }
         persist(immediate: true)
     }
     func importArchive(_ data: Data) throws {

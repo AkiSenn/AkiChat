@@ -23,6 +23,10 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
     private var sawFinish = false
     private var stream = true
     private var status = 0
+    private var originalRequest: URLRequest?
+    private var retryCount = 0
+    private var retryWork: DispatchWorkItem?
+    private var receivedResponseData = false
     private var toolParts: [Int: ToolCall] = [:]
     private var onUpdate: ((ChatSnapshot) -> Void)?
     private var onCompletion: ((Result<ChatSnapshot, Error>) -> Void)?
@@ -32,6 +36,7 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
                completion: @escaping (Result<ChatSnapshot, Error>) -> Void) {
         worker.async {
             self.stream = stream; self.onUpdate = onUpdate; self.onCompletion = completion
+            self.originalRequest = request
             configuration.timeoutIntervalForRequest = request.timeoutInterval
             configuration.timeoutIntervalForResource = max(120, request.timeoutInterval * 5)
             configuration.urlCache = nil
@@ -51,8 +56,19 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
     }
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                     completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard !terminal, dataTask === task else { completionHandler(.cancel); return }
         guard let http = response as? HTTPURLResponse else { completionHandler(.cancel); complete(.failure(AppError.malformed)); return }
         status = http.statusCode
+        if !receivedResponseData, let delay = HTTPRetryPolicy.delay(response: http, attempt: retryCount), let request = originalRequest {
+            retryCount += 1; task = nil
+            completionHandler(.cancel)
+            let work = DispatchWorkItem { [weak self] in
+                guard let self = self, !self.terminal else { return }
+                self.retryWork = nil; self.task = self.session?.dataTask(with: request); self.task?.resume()
+            }
+            retryWork = work; worker.asyncAfter(deadline: .now() + delay, execute: work)
+            return
+        }
         guard (200...299).contains(status) else {
             completionHandler(.cancel); complete(.failure(AppError.http(status))); return
         }
@@ -65,7 +81,8 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
         complete(.failure(AppError.validation("API 返回重定向，请填写最终 HTTPS 地址。")))
     }
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        guard !terminal else { return }
+        guard !terminal, dataTask === task else { return }
+        receivedResponseData = true
         do {
             if stream {
                 for event in try parser.feed(data) {
@@ -81,7 +98,7 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
         } catch { complete(.failure(error)); task?.cancel() }
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard !terminal else { return }
+        guard !terminal, task === self.task else { return }
         if let error = error { complete(.failure(error)); return }
         do {
             if stream {
@@ -129,6 +146,7 @@ final class ChatTransport: NSObject, URLSessionDataDelegate {
     }
     private func complete(_ result: Result<ChatSnapshot, Error>) {
         guard !terminal else { return }; terminal = true
+        retryWork?.cancel(); retryWork = nil; originalRequest = nil
         flush(); timer?.cancel(); timer = nil
         let callback = onCompletion; onCompletion = nil; onUpdate = nil
         session?.invalidateAndCancel(); session = nil; task = nil

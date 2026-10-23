@@ -39,10 +39,7 @@ struct SettingsView: View {
                         TextEditor(text: setting(\.systemPrompt)).frame(height: 110).padding(6).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2)))
                         Text("上下文与输出预算按会话配置。普通请求省略思考历史；DeepSeek 工具请求保留原始轮次的思考字段。").font(.caption).foregroundColor(.secondary)
                         Toggle("流式响应", isOn: setting(\.streaming))
-                        Picker("推理强度", selection: Binding(get: { store.effort }, set: { store.setEffort($0) })) {
-                            ForEach(ReasoningEffort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }.pickerStyle(SegmentedPickerStyle())
-                        Text("推理强度仅用于 DeepSeek 深度思考。").font(.caption).foregroundColor(.secondary)
+                        ReasoningControls()
                     }
                     Card {
                         Label("生成参数", systemImage: "slider.horizontal.3").font(.headline)
