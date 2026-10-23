@@ -145,6 +145,10 @@ final class PerformanceRegressionTests: XCTestCase {
         loader.release(); XCTAssertNil(loader.image)
         withExtendedLifetime(sink) {}
     }
+    func testMeasureLongMarkdownParsing() {
+        let source = "# Long document\n\n```swift\n" + (0..<5000).map { "let codeLine\($0) = \($0)" }.joined(separator: "\n") + "\n```"
+        measure { XCTAssertEqual(MarkdownParser.blocks(source).count, 2) }
+    }
 }
 
 private final class PerformanceSender: ChatRequestSending {
