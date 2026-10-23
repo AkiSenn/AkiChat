@@ -11,6 +11,11 @@
     <key>CFBundleShortVersionString</key><string>2.0.2</string>
     <key>CFBundleVersion</key><string>4</string>
     <key>LSRequiresIPhoneOS</key><true/>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key><true/>
+    </dict>
+    <key>NSLocalNetworkUsageDescription</key><string>用于连接你自行部署在局域网中的 WorkBuddy2API Hub 代理服务。</string>
     <key>UILaunchScreen</key><dict/>
     <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
     <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
