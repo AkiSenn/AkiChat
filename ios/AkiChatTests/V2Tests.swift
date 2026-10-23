@@ -68,3 +68,60 @@ final class DiscoveryTests: XCTestCase {
         MockURLProtocol.handler = nil
     }
 }
+
+
+// Regression tests for the WorkBuddy2API-Hub OpenAI-compatible gateway.
+final class WorkBuddyHubCompatibilityTests: XCTestCase {
+    func testModelMetadataAndCapabilities() throws {
+        let json = """
+        {"object":"list","data":[
+          {"id":"deepseek-v4.1-flash","name":"DeepSeek V4.1 Flash","context_length":1000000,
+           "max_output_tokens":32768,"supports_vision":true,"supports_reasoning":true,
+           "reasoning_efforts":["low","medium","high"],"reasoning_default_effort":"medium",
+           "reasoning_can_disable":false,"capabilities":{"tools":true}},
+          {"id":"glm-5.3-flash","capabilities":{"vision":false}}
+        ]}
+        """
+        let models = try ModelDiscovery.parse(Data(json.utf8), provider: .workBuddy)
+        XCTAssertEqual(models.count, 2)
+        XCTAssertEqual(models[0].contextWindow, 1000000)
+        XCTAssertEqual(models[0].effort, ["low","medium","high"])
+        XCTAssertEqual(models[0].discovered.vision, true)
+        XCTAssertEqual(models[0].discovered.tools, true)
+        XCTAssertEqual(models[1].discovered.vision, false)
+        let applied = models[0].apply(to: .workBuddy)
+        XCTAssertEqual(applied.options.workBuddy?.defaultEffort, "medium")
+        XCTAssertEqual(applied.options.workBuddy?.canDisableThinking, false)
+    }
+
+    func testHubReasoningWireFormat() throws {
+        let raw = """
+        {"data":[{"id":"deepseek-v4.1-flash","reasoning_efforts":["low","medium","high"],
+                  "reasoning_default_effort":"medium","supports_reasoning":true}]}
+        """
+        let model = try XCTUnwrap(ModelDiscovery.parse(Data(raw.utf8), provider: .workBuddy).first)
+        var provider = model.apply(to: .workBuddy)
+        provider.baseURL = "https://gateway.example/v1"
+        var c = Conversation(providerID: provider.id)
+        c.messages = [Message(role: .user, content: "你好")]
+        c.thinking = true
+        c.effort = .max
+        let request = try RequestBuilder.make(provider: provider, key: "test-key", conversation: c, settings: AppSettings(), stream: true)
+        XCTAssertEqual(request.url?.absoluteString, "https://gateway.example/v1/chat/completions")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+        XCTAssertNil(body["thinking"])
+        XCTAssertEqual(body["reasoning_effort"] as? String, "medium")
+        XCTAssertNil(body["temperature"])
+        c.thinking = false
+        let offRequest = try RequestBuilder.make(provider: provider, key: "test-key", conversation: c, settings: AppSettings(), stream: false)
+        let off = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(offRequest.httpBody)) as? [String: Any])
+        XCTAssertNil(off["reasoning_effort"])
+    }
+
+    func testPrivateLANHTTPRequiresExplicitOptIn() throws {
+        XCTAssertThrowsError(try Endpoint.url("http://192.168.1.20:8788/v1", path: "/models"))
+        XCTAssertEqual(try Endpoint.url("http://192.168.1.20:8788/v1", path: "/models", allowLANHTTP: true).absoluteString,
+                       "http://192.168.1.20:8788/v1/models")
+        XCTAssertThrowsError(try Endpoint.url("http://example.com:8788/v1", path: "/models", allowLANHTTP: true))
+    }
+}
