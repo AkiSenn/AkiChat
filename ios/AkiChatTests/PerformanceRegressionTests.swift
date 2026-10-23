@@ -113,6 +113,13 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertEqual(store.providerName, "DeepSeek"); XCTAssertEqual(store.selectedModelLabel, "deepseek-flash")
         XCTAssertEqual(store.providers[0].id, p.id); XCTAssertEqual(store.providers[0].apiKeyReference, p.apiKeyReference)
         let remote = try ModelDiscovery.parse(Data("{\"data\":[{\"id\":\"deepseek-flash\"},{\"id\":\"deepseek-v4-pro\"}]}".utf8), provider: p)
+        XCTAssertTrue(remote[0].apply(to: p).supportsThinking)
+        XCTAssertTrue(remote[0].apply(to: p).supportsVision)
+        XCTAssertFalse(remote[1].apply(to: p).supportsThinking)
+        let disabled = try ModelDiscovery.parse(Data("{\"data\":[{\"id\":\"deepseek-flash\",\"supports_reasoning\":false,\"supports_vision\":false,\"supports_tool_calls\":false}]}".utf8), provider: p)
+        XCTAssertFalse(disabled[0].apply(to: p).supportsThinking)
+        XCTAssertFalse(disabled[0].apply(to: p).supportsVision)
+        XCTAssertFalse(disabled[0].apply(to: p).options.supportsTools)
         for model in remote { store.saveModel(model, providerID: p.id) }
         store.selectModel(providerID: p.id, modelID: "deepseek-v4-pro")
         let request = try RequestBuilder.make(provider: XCTUnwrap(store.provider), key: "mock", conversation: XCTUnwrap(store.current), settings: store.settings, stream: true)

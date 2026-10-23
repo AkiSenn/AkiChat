@@ -29,7 +29,12 @@ enum ModelDiscovery {
             model.discovered.streaming = chatCaps["streaming"] as? Bool
             model.discovered.systemPrompt = chatCaps["system_prompt"] as? Bool
             if provider.kind == .deepSeek && id == "deepseek-flash" {
-                model.discovered.tools = true; model.discovered.prefix = true // documented official preset
+                // An ID-only catalog must not erase the built-in default's capabilities.
+                // Explicit remote flags still win; unknown model IDs remain conservative.
+                model.discovered.vision = model.discovered.vision ?? Provider.deepSeek.supportsVision
+                model.discovered.thinking = model.discovered.thinking ?? Provider.deepSeek.supportsThinking
+                model.discovered.tools = model.discovered.tools ?? true
+                model.discovered.prefix = model.discovered.prefix ?? true
             }
             let metadataSource: [String: Any] = provider.kind == .workBuddy ? row : caps
             if let encoded = try? JSONSerialization.data(withJSONObject: metadataSource, options: [.sortedKeys]) { model.metadata = String(decoding: encoded, as: UTF8.self) }
