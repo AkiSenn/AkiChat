@@ -159,7 +159,11 @@ struct ProviderEditor: View {
     private func test() {
         do {
             guard !deleteKey else { throw AppError.validation("取消删除密钥后再测试") }
-            let p = try validated()
+            var p = try validated()
+            let models = store.models(for: p.id)
+            let selectedID = store.current?.providerID == p.id ? store.current?.options.modelID : nil
+            let testModel = p.modelID.isEmpty ? (models.first(where: { $0.id == selectedID }) ?? models.first) : models.first(where: { $0.id == p.modelID })
+            if let model = testModel { p = model.apply(to: p) }
             let apiKey: String
             if key.isEmpty { apiKey = try KeychainStore.read(p.apiKeyReference) ?? "" }
             else { apiKey = key }
