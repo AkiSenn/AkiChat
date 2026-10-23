@@ -35,9 +35,7 @@ struct MessageRow: View, Equatable {
                 }.padding(12).background(Theme.accent.opacity(0.055)).cornerRadius(12)
             }
             ForEach(message.images) { attachment in
-                if let image = UIImage(data: attachment.jpeg) {
-                    Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 220).cornerRadius(12)
-                }
+                AttachmentThumbnail(attachment: attachment).frame(maxHeight: 220).cornerRadius(12)
             }
             if !message.content.isEmpty {
                 if isActive { StreamingMarkdownView(source: message.content, size: fontSize) }

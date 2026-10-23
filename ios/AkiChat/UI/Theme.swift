@@ -2,12 +2,20 @@ import SwiftUI
 
 enum Theme {
     static let accent = Color(red: 0.22, green: 0.38, blue: 0.91)
-    static let background = Color(UIColor.systemGroupedBackground)
+    static let background = Color(UIColor { $0.userInterfaceStyle == .dark ? .black : .systemGroupedBackground })
     static let card = Color(UIColor.secondarySystemGroupedBackground)
 }
 struct BlurView: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIVisualEffectView { UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial)) }
-    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {}
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    final class Coordinator { var reduced: Bool? }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> UIVisualEffectView { UIVisualEffectView() }
+    func updateUIView(_ view: UIVisualEffectView, context: Context) {
+        guard context.coordinator.reduced != reduceTransparency else { return }
+        context.coordinator.reduced = reduceTransparency
+        view.effect = reduceTransparency ? nil : UIBlurEffect(style: .systemMaterial)
+        view.backgroundColor = reduceTransparency ? .secondarySystemBackground : .clear
+    }
 }
 struct Card<Content: View>: View {
     let content: Content

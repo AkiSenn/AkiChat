@@ -9,12 +9,11 @@ struct ModelsView: View {
     @State private var editing: ModelRecord?
     @State private var deleting: ModelRecord?
     var sorted: [ModelRecord] {
-        store.models(for: providerID).filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || $0.id.localizedCaseInsensitiveContains(query) }
-            .sorted { a, b in a.favorite != b.favorite ? a.favorite : (a.order != b.order ? a.order < b.order : a.name.localizedStandardCompare(b.name) == .orderedAscending) }
+        ModelDiscovery.filtered(store.models(for: providerID), query: query)
     }
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 14) {
                 TextField("搜索模型名称或 ID", text: $query).padding(14).background(Theme.card).cornerRadius(14)
                 HStack {
                     Button(store.refreshingModels.contains(providerID) ? "取消刷新" : "刷新 /models") {
@@ -52,7 +51,6 @@ struct ModelsView: View {
                 Text("未知能力保持未声明，不推断图片、思考或工具支持。长按模型可覆盖能力、排序与提示词。").font(.caption).foregroundColor(.secondary)
             }.padding(18)
         }.background(Theme.background).navigationTitle("模型库")
-            .onAppear { store.refreshModels(providerID, onlyIfNeeded: true) }
             .sheet(item: $editing) { ModelEditor(model: $0, providerID: providerID).environmentObject(store) }
             .alert(item: $deleting) { model in
                 Alert(title: Text("删除自定义模型？"), message: Text(model.id), primaryButton: .destructive(Text("删除")) { store.deleteModel(model.id, providerID: providerID) }, secondaryButton: .cancel(Text("取消")))
@@ -87,7 +85,7 @@ struct ModelEditor: View {
                         capability("流式", path: \.streaming)
                         capability("System Prompt", path: \.systemPrompt)
                         capability("Assistant Prefix", path: \.prefix)
-                        Text("思考和前缀的特殊协议目前仅由 DeepSeek 适配层发送。").font(.caption).foregroundColor(.secondary)
+                        Text("思考参数由服务商适配层发送；WorkBuddy 使用模型目录档位，Prefix 仅支持 DeepSeek 官方。").font(.caption).foregroundColor(.secondary)
                     }
                     Card {
                         Text("模型级 System Prompt").font(.headline)

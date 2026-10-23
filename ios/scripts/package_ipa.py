@@ -48,7 +48,8 @@ def validate_app(app):
     assert re.search(r"(?:minos|version)\s+14\.0(?:\s|$)", loads), "Mach-O minimum OS mismatch"
     assert (app / "Assets.car").is_file()
     assert not (app / "embedded.mobileprovision").exists()
-    assert not info.get("NSAppTransportSecurity")
+    assert info.get("NSAppTransportSecurity") == {"NSAllowsLocalNetworking": True}, "Only local networking ATS exception is allowed"
+    assert info.get("NSLocalNetworkUsageDescription")
     validate_embedded(app)
     return binary
 

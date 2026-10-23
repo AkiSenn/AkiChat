@@ -1,6 +1,11 @@
 import Foundation
 
 enum ModelDiscovery {
+    static func filtered(_ models: [ModelRecord], query: String, favoritesOnly: Bool = false) -> [ModelRecord] {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return models.filter { (!favoritesOnly || $0.favorite) && (text.isEmpty || $0.name.localizedCaseInsensitiveContains(text) || $0.id.localizedCaseInsensitiveContains(text)) }
+            .sorted { a, b in a.favorite != b.favorite ? a.favorite : (a.order != b.order ? a.order < b.order : a.name.localizedStandardCompare(b.name) == .orderedAscending) }
+    }
     static func parse(_ data: Data, provider: Provider) throws -> [ModelRecord] {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], let rows = object["data"] as? [[String: Any]] else { throw AppError.malformed }
         guard rows.count <= 5000 else { throw AppError.validation("模型列表超过 5000 条") }
@@ -19,12 +24,17 @@ enum ModelDiscovery {
                 (row["input_modalities"] == nil ? nil : model.inputModalities.contains("image"))
             model.discovered.thinking = row["supports_reasoning"] as? Bool ?? (row["capabilities"] as? [String: Any])?["reasoning"] as? Bool ??
                 (model.effort.isEmpty && row["reasoning_fixed_effort"] == nil ? nil : true)
-            model.discovered.tools = row["supports_tools"] as? Bool ?? (row["capabilities"] as? [String: Any])?["tools"] as? Bool ??
+            model.discovered.tools = row["supports_tool_calls"] as? Bool ?? (row["capabilities"] as? [String: Any])?["tool_calls"] as? Bool ?? row["supports_tools"] as? Bool ?? (row["capabilities"] as? [String: Any])?["tools"] as? Bool ??
                 chatCaps["function_calling"] as? Bool ?? chatCaps["tools"] as? Bool
             model.discovered.streaming = chatCaps["streaming"] as? Bool
             model.discovered.systemPrompt = chatCaps["system_prompt"] as? Bool
             if provider.kind == .deepSeek && id == "deepseek-flash" {
-                model.discovered.tools = true; model.discovered.prefix = true // documented official preset
+                // An ID-only catalog must not erase the built-in default's capabilities.
+                // Explicit remote flags still win; unknown model IDs remain conservative.
+                model.discovered.vision = model.discovered.vision ?? Provider.deepSeek.supportsVision
+                model.discovered.thinking = model.discovered.thinking ?? Provider.deepSeek.supportsThinking
+                model.discovered.tools = model.discovered.tools ?? true
+                model.discovered.prefix = model.discovered.prefix ?? true
             }
             let metadataSource: [String: Any] = provider.kind == .workBuddy ? row : caps
             if let encoded = try? JSONSerialization.data(withJSONObject: metadataSource, options: [.sortedKeys]) { model.metadata = String(decoding: encoded, as: UTF8.self) }
@@ -36,6 +46,7 @@ enum ModelDiscovery {
             var value = remote
             if let old = cached.first(where: { $0.id == remote.id }) {
                 value.favorite = old.favorite; value.order = old.order; value.overrides = old.overrides
+                value.manual = old.manual
                 value.systemPrompt = old.systemPrompt; value.presetIDs = old.presetIDs
                 value.contextWindowOverride = old.contextWindowOverride; value.outputLimitOverride = old.outputLimitOverride
                 if old.manual { value.contextWindow = old.contextWindow ?? value.contextWindow; value.outputLimit = old.outputLimit ?? value.outputLimit }

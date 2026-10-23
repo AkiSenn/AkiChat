@@ -15,37 +15,47 @@ final class AppStore: ObservableObject {
     @Published private(set) var modelErrors: [UUID: String] = [:]
     @Published private(set) var generationStatus = ""
     @Published var notice: String?
+    let chat = ChatPresentation()
+    let composer = ComposerState()
+    @Published private(set) var provider: Provider?
+    var providerName: String { providers.first { $0.id == current?.providerID }?.name ?? "选择服务商" }
+    var selectedModelLabel: String {
+        let id = current?.options.modelID ?? providers.first { $0.id == current?.providerID }?.modelID ?? ""
+        return id.isEmpty ? "选择模型" : id
+    }
     private var database: LocalDatabase?
     private let disk = DispatchQueue(label: "app.akichat.persistence", qos: .utility)
     private var run: ChatRun?
     private var compression: Cancellable?
     private var modelRequests: [UUID: JSONHTTPClient] = [:]
+    private let modelConfiguration: () -> URLSessionConfiguration
+    private let senderFactory: () -> ChatRequestSending
     private var generationID: UUID?
     private var saveWork: DispatchWorkItem?
     private var lastCheckpoint = Date.distantPast
     private var lifecycle: AnyCancellable?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     var current: Conversation? { conversations.first { $0.id == selectedID } }
-    var provider: Provider? {
-        guard let base = providers.first(where: { $0.id == current?.providerID }) else { return nil }
+    private func resolveProvider() {
+        guard let base = providers.first(where: { $0.id == current?.providerID }) else { provider = nil; return }
         let id = current?.options.modelID ?? base.modelID
-        return models(for: base.id).first(where: { $0.id == id })?.apply(to: base) ?? base
+        provider = models(for: base.id).first(where: { $0.id == id })?.apply(to: base)
     }
     var messages: [Message] { current?.messages ?? [] }
-    var draft: String { current?.draft ?? "" }
-    var draftImages: [Attachment] { current?.draftImages ?? [] }
+    var draft: String { composer.text }
+    var draftImages: [Attachment] { composer.images }
     var thinking: Bool { current?.thinking ?? true }
     var effort: ReasoningEffort { current?.effort ?? .high }
-    var composerHeight: CGFloat {
-        let width = max(180, UIScreen.main.bounds.width - 114)
-        let rect = ((draft.isEmpty ? " " : draft) as NSString).boundingRect(with: CGSize(width: width, height: 1000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: UIFont.systemFont(ofSize: 16)], context: nil)
-        return min(140, max(42, ceil(rect.height) + 20))
-    }
-    init(database suppliedDatabase: LocalDatabase? = nil) {
+    init(database suppliedDatabase: LocalDatabase? = nil, modelConfiguration: @escaping () -> URLSessionConfiguration = { .ephemeral }, senderFactory: @escaping () -> ChatRequestSending = { ChatTransport() }) {
+        self.modelConfiguration = modelConfiguration; self.senderFactory = senderFactory
         do {
+            #if DEBUG
+            let db = try suppliedDatabase ?? Self.uiFixtureDatabase() ?? LocalDatabase()
+            #else
             let db = try suppliedDatabase ?? LocalDatabase()
+            #endif
             // Decode everything before enabling writes; never overwrite an unreadable store.
-            providers = try db.load("providers.v1", as: [Provider].self) ?? [.deepSeek, .openAI]
+            providers = (try db.load("providers.v1", as: [Provider].self) ?? [.deepSeek, .openAI]).map(ProviderNaming.normalize)
             catalogs = try db.load("catalogs.v2", as: [ModelCatalog].self) ?? []
             settings = try db.load("settings.v1", as: AppSettings.self) ?? AppSettings()
             if settings.advanced == nil { settings.options = settings.options }
@@ -63,6 +73,7 @@ final class AppStore: ObservableObject {
             notice = "本地数据读取失败，已暂停持久化以保护原记录。请导出当前内容后重新启动。\n\(error.localizedDescription)"
             providers = [.deepSeek]; conversations = [Conversation(providerID: providers[0].id)]; selectedID = conversations[0].id
         }
+        composer.load(current); chat.select(selectedID, messages: messages); resolveProvider()
         lifecycle = NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification).sink { [weak self] _ in
             guard let self = self else { return }
             self.backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Save conversation") { [weak self] in self?.endBackgroundTask() }
@@ -76,9 +87,21 @@ final class AppStore: ObservableObject {
     }
     private func mutate(_ action: (inout Conversation) -> Void) {
         guard let i = conversations.firstIndex(where: { $0.id == selectedID }) else { return }
+        let oldProvider = conversations[i].providerID, oldModel = conversations[i].options.modelID
         action(&conversations[i]); renderRevision += 1
+        chat.reconcile(conversations[i].messages)
+        if conversations[i].providerID != oldProvider || conversations[i].options.modelID != oldModel { resolveProvider() }
     }
-    func setDraft(_ value: String) { mutate { $0.draft = value }; persist() }
+    func setDraft(_ value: String) { composer.text = value; persist() }
+    private func commitDraft() {
+        guard let i = conversations.firstIndex(where: { $0.id == selectedID }),
+              conversations[i].draft != composer.text || conversations[i].draftImages != composer.images else { return }
+        conversations[i].draft = composer.text; conversations[i].draftImages = composer.images
+    }
+    func exportConversations() -> [Conversation] { commitDraft(); return conversations }
+    private func loadSelection() {
+        composer.load(current); chat.select(selectedID, messages: messages); resolveProvider()
+    }
     func setThinking(_ value: Bool) { mutate { $0.thinking = value }; persist() }
     func setEffort(_ value: ReasoningEffort) { mutate { $0.effort = value }; persist() }
     func updateConversationOption<T>(_ path: WritableKeyPath<ConversationOptions, T>, _ value: T) { mutate { $0.options[keyPath: path] = value }; persist() }
@@ -93,16 +116,25 @@ final class AppStore: ObservableObject {
     }
     func updateSetting<T>(_ path: WritableKeyPath<AppSettings, T>, _ value: T) { settings[keyPath: path] = value; persist() }
     func newConversation() {
-        stop()
+        stop(); commitDraft()
         guard let p = providers.first else { return }
-        let c = Conversation(providerID: provider?.id ?? p.id)
-        conversations.insert(c, at: 0); selectedID = c.id; renderRevision += 1; persist(immediate: true)
+        let selected = provider
+        var c = Conversation(providerID: selected?.id ?? p.id)
+        if let modelID = selected?.modelID { c.options.modelID = modelID }
+        conversations.insert(c, at: 0); selectedID = c.id; loadSelection(); renderRevision += 1; persist(immediate: true)
     }
-    func selectConversation(_ id: UUID) { stop(); selectedID = id; renderRevision += 1 }
+    func selectConversation(_ id: UUID) { stop(); commitDraft(); selectedID = id; loadSelection(); renderRevision += 1; persist(immediate: true) }
     func selectProvider(_ id: UUID) { guard !isGenerating else { return }; mutate { $0.providerID = id; $0.options.modelID = nil }; persist() }
     func selectModel(providerID: UUID, modelID: String) {
-        guard !isGenerating else { return }
-        mutate { $0.providerID = providerID; $0.options.modelID = modelID; $0.options.context.calibration = nil }; persist()
+        guard !isGenerating, let base = providers.first(where: { $0.id == providerID }), let model = models(for: providerID).first(where: { $0.id == modelID }) else { return }
+        let resolved = model.apply(to: base)
+        mutate {
+            $0.providerID = providerID; $0.options.modelID = modelID; $0.options.context.calibration = nil
+            if !resolved.supportsThinking { $0.thinking = false }
+            if !resolved.options.supportsTools { $0.options.toolsEnabled = false; $0.options.searchMode = .off }
+        }
+        if !resolved.supportsVision && !draftImages.isEmpty { notice = "附件已保留，当前模型不支持图片；请移除附件或切换支持图片的模型。" }
+        persist()
     }
     func models(for providerID: UUID) -> [ModelRecord] {
         if let catalog = catalogs.first(where: { $0.id == providerID }), !catalog.models.isEmpty { return catalog.models }
@@ -121,11 +153,11 @@ final class AppStore: ObservableObject {
         guard var c = catalogs.first(where: { $0.id == providerID }), c.models.first(where: { $0.id == id })?.manual == true else { return }
         c.models.removeAll { $0.id == id }; replaceCatalog(c)
         for i in conversations.indices where conversations[i].providerID == providerID && conversations[i].options.modelID == id { conversations[i].options.modelID = c.models.first?.id }
-        persist(immediate: true)
+        resolveProvider(); persist(immediate: true)
     }
     private func replaceCatalog(_ value: ModelCatalog) {
         if let i = catalogs.firstIndex(where: { $0.id == value.id }) { catalogs[i] = value } else { catalogs.append(value) }
-        persist(immediate: true)
+        resolveProvider(); persist(immediate: true)
     }
     func cancelModelRefresh(_ id: UUID) { modelRequests.removeValue(forKey: id)?.cancel(); refreshingModels.remove(id) }
     func refreshModels(_ id: UUID, onlyIfNeeded: Bool = false) {
@@ -134,7 +166,7 @@ final class AppStore: ObservableObject {
         do {
             let request = try JSONHTTPClient.request(url: Endpoint.url(p.baseURL, path: p.options.modelsPath, allowLANHTTP: p.kind == .workBuddy && (p.options.workBuddy?.allowLANHTTP ?? false)), key: KeychainStore.read(p.apiKeyReference) ?? "", timeout: p.options.timeout, headers: p.customHeaders)
             let client = JSONHTTPClient(); modelRequests[id] = client; refreshingModels.insert(id); modelErrors[id] = nil
-            client.start(request) { [weak self] result in
+            client.start(request, configuration: modelConfiguration()) { [weak self] result in
                 guard let self = self, self.modelRequests[id] === client else { return }
                 self.modelRequests[id] = nil; self.refreshingModels.remove(id)
                 do {
@@ -151,23 +183,24 @@ final class AppStore: ObservableObject {
         if !value.isEmpty { conversations[i].title = String(value.prefix(100)); persist() }
     }
     func deleteConversation(_ id: UUID) {
+        commitDraft()
         if id == selectedID { stop() }
         conversations.removeAll { $0.id == id }
         if id == selectedID { selectedID = conversations.first?.id }
         if conversations.isEmpty { newConversation() }
-        persist(immediate: true)
+        loadSelection(); persist(immediate: true)
     }
     func clearCurrent() {
         stop()
         mutate { $0.messages = []; $0.draft = ""; $0.draftImages = []; $0.summaries = []; $0.activeSummaryID = nil; $0.updatedAt = Date() }
-        persist(immediate: true)
+        composer.load(current); persist(immediate: true)
     }
     func clearAll() { stop(); conversations = []; newConversation(); persist(immediate: true) }
     func addImage(_ image: Attachment) {
         guard draftImages.count < 4 else { notice = "每条消息最多添加 4 张图片"; return }
-        mutate { $0.draftImages.append(image) }; persist()
+        composer.images.append(image); persist()
     }
-    func removeImage(_ id: UUID) { mutate { $0.draftImages.removeAll { $0.id == id } }; persist() }
+    func removeImage(_ id: UUID) { composer.images.removeAll { $0.id == id }; persist() }
     func send() {
         guard !isGenerating else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -183,7 +216,7 @@ final class AppStore: ObservableObject {
             if $0.messages.isEmpty { $0.title = String((text.isEmpty ? "图片对话" : text).prefix(30)) }
             $0.messages.append(user); $0.draft = ""; $0.draftImages = []; $0.updatedAt = Date()
         }
-        beginGeneration()
+        composer.load(current); chat.requestLatest(); beginGeneration()
     }
     func editAndResend(_ id: UUID, text: String) {
         stop()
@@ -230,12 +263,17 @@ final class AppStore: ObservableObject {
                 search = DeepSeekSearchService(key: searchKey)
             }
             let executor = BuiltInToolExecutor(options: c.options, search: search, count: settings.options.searchCount)
-            let run = ChatRun(provider: p, key: key, conversation: c, settings: settings, executor: executor, canSearch: search != nil, update: { [weak self] messages, status in
+            let run = ChatRun(provider: p, key: key, conversation: c, settings: settings, executor: executor, canSearch: search != nil, senderFactory: senderFactory, update: { [weak self] messages, status in
                 guard let self = self, self.generationID == token else { return }
-                self.mutate { $0.messages = messages; $0.updatedAt = Date() }; self.generationStatus = status
-                if Date().timeIntervalSince(self.lastCheckpoint) >= 2 { self.lastCheckpoint = Date(); self.persist(immediate: true) }
+                self.chat.receive(messages)
+                if self.generationStatus != status { self.generationStatus = status }
+                if Date().timeIntervalSince(self.lastCheckpoint) >= 2 {
+                    self.mutate { $0.messages = messages; $0.updatedAt = Date() }
+                    self.lastCheckpoint = Date(); self.persist(immediate: true)
+                }
             }, completion: { [weak self] result in
                 guard let self = self, self.generationID == token else { return }
+                if let latest = self.run?.conversation.messages { self.mutate { $0.messages = latest; $0.updatedAt = Date() } }
                 if case .success(let messages) = result, let actual = messages.last?.usage?.prompt_tokens,
                    let estimate = self.run?.lastPromptEstimate, estimate > 0 {
                     self.mutate { c in c.options.context.calibration = min(2, max(0.5, (c.options.context.calibration ?? 1) * Double(actual) / Double(estimate))) }
@@ -321,8 +359,9 @@ final class AppStore: ObservableObject {
         else if let key = newKey, !key.isEmpty { try KeychainStore.write(key.trimmingCharacters(in: .whitespacesAndNewlines), reference: value.apiKeyReference) }
         var next = providers
         if let i = next.firstIndex(where: { $0.id == value.id }) { next[i] = value } else { next.append(value) }
-        providers = next; persist(immediate: true)
-        if newKey?.isEmpty == false && !deleteKey { refreshModels(value.id) }
+        cancelModelRefresh(value.id)
+        providers = next; resolveProvider(); persist(immediate: true)
+        if !deleteKey { refreshModels(value.id) }
     }
     func deleteProvider(_ id: UUID) throws {
         guard providers.count > 1 else { throw AppError.validation("请至少保留一个服务商") }
@@ -332,8 +371,11 @@ final class AppStore: ObservableObject {
         let next = providers.filter { $0.id != id }
         try KeychainStore.delete(value.apiKeyReference)
         providers = next
-        for i in conversations.indices where conversations[i].providerID == id { conversations[i].providerID = next[0].id }
-        persist(immediate: true)
+        for i in conversations.indices where conversations[i].providerID == id {
+            conversations[i].providerID = next[0].id; conversations[i].options.modelID = nil
+            conversations[i].options.context.calibration = nil
+        }
+        resolveProvider(); persist(immediate: true)
     }
     func importArchive(_ data: Data) throws {
         let incoming = try ExportService.decode(data)
@@ -353,9 +395,18 @@ final class AppStore: ObservableObject {
     }
     private func persist(immediate: Bool = false) {
         saveWork?.cancel()
+        if immediate { saveNow() }
+        else {
+            let work = DispatchWorkItem { [weak self] in self?.saveNow() }
+            saveWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: work)
+        }
+    }
+    private func saveNow() {
         guard let database = database else { return }
+        commitDraft()
         let conversations = conversations, providers = providers, settings = settings, catalogs = catalogs
-        let work = DispatchWorkItem { [weak self] in
+        disk.async { [weak self] in
             do {
                 try database.save(conversations, key: "conversations.v1")
                 try database.save(providers, key: "providers.v1")
@@ -363,7 +414,5 @@ final class AppStore: ObservableObject {
                 try database.save(catalogs, key: "catalogs.v2")
             } catch { DispatchQueue.main.async { self?.notice = "本地保存失败，请及时导出备份。" } }
         }
-        saveWork = work
-        if immediate { disk.async(execute: work) } else { disk.asyncAfter(deadline: .now() + 0.7, execute: work) }
     }
 }

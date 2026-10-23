@@ -27,7 +27,7 @@ final class RequestTests: XCTestCase {
         for effort in ReasoningEffort.allCases {
             let value = try body(effort: effort)
             XCTAssertEqual((value["thinking"] as? [String: String])?["type"], "enabled")
-            XCTAssertEqual(value["reasoning_effort"] as? String, effort.rawValue)
+            XCTAssertEqual(value["reasoning_effort"] as? String, effort == .medium ? "high" : effort.rawValue)
             XCTAssertNil(value["temperature"])
         }
         let off = try body(thinking: false)

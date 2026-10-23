@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 enum Endpoint {
     static func chatURL(_ input: String, path: String = "/chat/completions", beta: Bool = false, allowLANHTTP: Bool = false) throws -> URL {
@@ -28,10 +29,16 @@ enum Endpoint {
         return url
     }
     private static func privateLANHost(_ hostname: String) -> Bool {
-        let host = hostname.lowercased()
-        if host == "localhost" || host == "::1" || host.hasSuffix(".local") || host.hasPrefix("fe80:") { return true }
+        let host = hostname.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        if host == "localhost" || (host.hasSuffix(".local") && host.count > 6) { return true }
+        if let address = IPv6Address(host) {
+            let bytes = Array(address.rawValue)
+            return (bytes.dropLast().allSatisfy { $0 == 0 } && bytes.last == 1) ||
+                (bytes[0] & 0xfe == 0xfc) || (bytes[0] == 0xfe && bytes[1] & 0xc0 == 0x80)
+        }
         let parts = host.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 4 else { return false }
+        guard parts.allSatisfy({ !$0.isEmpty && $0.count <= 3 && $0.utf8.allSatisfy { (48...57).contains($0) } }) else { return false }
         let octets = parts.compactMap { UInt8($0) }
         guard octets.count == 4 else { return false }
         return octets[0] == 10 ||
@@ -109,17 +116,10 @@ enum RequestBuilder {
         if useTools { body["tools"] = tools; body["tool_choice"] = "auto" }
         if provider.kind == .deepSeek && provider.supportsThinking {
             body["thinking"] = ["type": conversation.thinking ? "enabled" : "disabled"]
-            if conversation.thinking { body["reasoning_effort"] = conversation.effort.rawValue }
+            if conversation.thinking { body["reasoning_effort"] = conversation.effort == .medium ? "high" : conversation.effort.rawValue }
         }
         if provider.kind == .workBuddy && provider.supportsThinking {
-            let hub = provider.options.workBuddy ?? WorkBuddyOptions()
-            if conversation.thinking {
-                let chosen = conversation.effort.rawValue
-                body["reasoning_effort"] = hub.reasoningEfforts.isEmpty || hub.reasoningEfforts.contains(chosen)
-                    ? chosen : (hub.defaultEffort ?? hub.reasoningEfforts[0])
-            } else if hub.canDisableThinking == true {
-                body["reasoning_effort"] = "none"
-            }
+            body["reasoning_effort"] = HubReasoning.resolve(provider: provider, conversation: conversation)
             // The Hub accepts the standard reasoning_effort field; never send DeepSeek's thinking object.
         }
         let sampling = provider.options.sendSamplingParameters ?? (provider.kind != .workBuddy && !officialOpenAI)

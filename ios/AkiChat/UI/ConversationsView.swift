@@ -25,7 +25,7 @@ struct ConversationsView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 14) {
+                LazyVStack(spacing: 14) {
                     NoticeBanner()
                     HStack {
                         Image(systemName: "magnifyingglass").foregroundColor(.secondary)
@@ -90,7 +90,8 @@ struct ConversationsView: View {
         }.navigationViewStyle(StackNavigationViewStyle())
     }
     private func export(_ c: Conversation, json: Bool) {
-        do { sheet = .share(try ShareFile.make(data: json ? ExportService.json([c]) : Data(ExportService.markdown(c).utf8), ext: json ? "json" : "md")) }
+        let latest = store.exportConversations().first(where: { $0.id == c.id }) ?? c
+        do { sheet = .share(try ShareFile.make(data: json ? ExportService.json([latest]) : Data(ExportService.markdown(latest).utf8), ext: json ? "json" : "md")) }
         catch { store.notice = error.localizedDescription }
     }
 }

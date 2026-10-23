@@ -6,7 +6,7 @@ struct ProvidersView: View {
     @State private var deleting: Provider?
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            LazyVStack(spacing: 16) {
                 NoticeBanner()
                 ForEach(store.providers) { p in
                     NavigationLink(destination: ModelsView(providerID: p.id).environmentObject(store)) {
@@ -17,7 +17,6 @@ struct ProvidersView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 7) {
                                     Text(p.name).font(.headline)
-                                    Text(p.displayName).font(.subheadline)
                                     Text(p.modelID).font(.caption).foregroundColor(.secondary)
                                 }
                                 Spacer(); Image(systemName: "chevron.right")
@@ -33,7 +32,7 @@ struct ProvidersView: View {
                     var p = Provider.workBuddy; p.id = UUID(); p.apiKeyReference = UUID().uuidString
                     editing = p
                 }
-                Text("每个配置代表一个服务商与模型组合；同一地址可配置多个模型。密钥仅保存到 Keychain。自定义 Header 只用于非敏感元数据。")
+                Text("每个服务商拥有独立模型目录；顶部面板可跨服务商切换。密钥仅保存到 Keychain。自定义 Header 只用于非敏感元数据。")
                     .font(.caption).foregroundColor(.secondary)
             }.padding(18)
         }.background(Theme.background).navigationTitle("模型与 API Key")
@@ -63,9 +62,9 @@ struct ProviderEditor: View {
                 VStack(spacing: 16) {
                     Card {
                         field("服务商名称", text: $provider.name)
-                        field("显示名称", text: $provider.displayName)
-                        field("Base URL（HTTPS）", text: $provider.baseURL)
-                        field("API 模型 ID", text: $provider.modelID)
+                        field("默认模型显示名称", text: $provider.displayName)
+                        field(provider.kind == .workBuddy ? "网关 Base URL（建议包含 /v1）" : "Base URL（HTTPS）", text: $provider.baseURL)
+                        field("默认 API 模型 ID", text: $provider.modelID)
                         field("Chat Completions 路径", text: $provider.options.chatPath)
                         field("Models 路径", text: $provider.options.modelsPath)
                         Picker("适配方式", selection: $provider.kind) {
@@ -79,12 +78,13 @@ struct ProviderEditor: View {
                                 get: { provider.options.workBuddy?.allowLANHTTP ?? false },
                                 set: { var options = provider.options; var hub = options.workBuddy ?? WorkBuddyOptions(); hub.allowLANHTTP = $0; options.workBuddy = hub; provider.options = options }
                             ))
-                            Text("推荐 HTTPS 反代。局域网 HTTP 可能泄漏 API Key，仅允许可信网络；iOS ATS 仍可能要求局部例外。").font(.caption).foregroundColor(.secondary)
+                            Text("开启后 Key、聊天和图片会以明文发送，仅用于你主动信任的私有 IP 或 .local 地址。使用系统 TLS 验证，未开放公网 HTTP。iOS 首次连接可能询问本地网络权限。").font(.caption).foregroundColor(.secondary)
                         }
                     }
                     Card {
                         Text("API Key").font(.headline)
                         SecureField("留空保留已存密钥", text: $key).autocapitalization(.none).disableAutocorrection(true)
+                        if provider.kind == .workBuddy { Text("填写 Hub 管理面板生成的网关 API Key；不是面板密码或上游 OAuth 凭据。").font(.caption).foregroundColor(.secondary) }
                         Toggle("删除已保存密钥", isOn: $deleteKey)
                         Text("密钥不会显示、导出或写入日志。API 测试将发送一条简短请求，可能产生少量费用。")
                             .font(.caption).foregroundColor(.secondary)
@@ -103,7 +103,7 @@ struct ProviderEditor: View {
                             Text("max_tokens").tag(Optional(OutputTokenField.maxTokens))
                             Text("max_completion_tokens").tag(Optional(OutputTokenField.maxCompletionTokens))
                         }
-                        Toggle("发送采样参数", isOn: Binding(get: { provider.options.sendSamplingParameters ?? (URL(string: provider.baseURL)?.host != "api.openai.com") }, set: { provider.options.sendSamplingParameters = $0 }))
+                        Toggle("发送采样参数", isOn: Binding(get: { provider.options.sendSamplingParameters ?? (provider.kind != .workBuddy && URL(string: provider.baseURL)?.host != "api.openai.com") }, set: { provider.options.sendSamplingParameters = $0 }))
                         Stepper("超时：\(Int(provider.options.timeout)) 秒", value: $provider.options.timeout, in: 10...300, step: 10)
                         Stepper("上下文：\(provider.options.contextWindow) tokens", value: $provider.options.contextWindow, in: 4096...1048576, step: 4096)
                         Stepper("最大输出：\(provider.options.outputLimit) tokens", value: $provider.options.outputLimit, in: 256...131072, step: 256)
@@ -122,7 +122,7 @@ struct ProviderEditor: View {
                         if !status.isEmpty { Text(status).font(.footnote).foregroundColor(.secondary) }
                     }
                 }.padding(18)
-            }.background(Theme.background).navigationTitle("配置模型").navigationBarTitleDisplayMode(.inline)
+            }.background(Theme.background).navigationTitle("配置服务商").navigationBarTitleDisplayMode(.inline)
                 .navigationBarItems(leading: Button("取消") { cancelTest(); presentation.wrappedValue.dismiss() }, trailing: Button("保存") { save() }.disabled(testing))
         }.navigationViewStyle(StackNavigationViewStyle())
             .onAppear {
@@ -158,10 +158,15 @@ struct ProviderEditor: View {
     private func test() {
         do {
             guard !deleteKey else { throw AppError.validation("取消删除密钥后再测试") }
-            let p = try validated()
+            var p = try validated()
+            let models = store.models(for: p.id)
+            let selectedID = store.current?.providerID == p.id ? store.current?.options.modelID : nil
+            let testModel = p.modelID.isEmpty ? (models.first(where: { $0.id == selectedID }) ?? models.first) : models.first(where: { $0.id == p.modelID })
+            if let model = testModel { p = model.apply(to: p) }
             let apiKey: String
             if key.isEmpty { apiKey = try KeychainStore.read(p.apiKeyReference) ?? "" }
             else { apiKey = key }
+            guard !p.modelID.isEmpty else { status = "请先保存地址和密钥以发现模型，再选择模型测试。"; return }
             var c = Conversation(providerID: p.id); c.thinking = false
             c.messages = [Message(role: .user, content: "Reply with OK.")]
             var settings = AppSettings(); settings.systemPrompt = ""; settings.maxTokens = 256
