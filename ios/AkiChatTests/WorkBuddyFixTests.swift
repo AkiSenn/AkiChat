@@ -211,7 +211,7 @@ final class RetrySafetyTests: XCTestCase {
         MockURLProtocol.handler = { request, client, proto in
             calls += 1
             disconnect = { client.urlProtocol(proto, didFailWithError: URLError(.networkConnectionLost)) }
-            client.urlProtocol(proto, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+            client.urlProtocol(proto, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/event-stream"])!, cacheStoragePolicy: .notAllowed)
             client.urlProtocol(proto, didLoad: Data("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n".utf8))
         }
         let transport = ChatTransport()
