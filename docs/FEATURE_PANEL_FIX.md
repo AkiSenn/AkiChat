@@ -25,3 +25,14 @@ SearchPanel 独立维护关闭/自动/每次、来源和搜索授权。复用既
 新增 FeaturePanelTests 验证协议参数、未知/强制思考、状态与旧授权兼容、无工具预搜索、真实自动工具搜索、关闭零搜索、失败/取消和聊天/搜索密钥隔离。UI 测试执行真实按钮点击、收起键盘、开关/档位、灰色重开、强制与未知模型、独立搜索面板、授权及三种模式，附截图。DEBUG 测试凭据为 Mock 且不参与 Release。
 
 兼容性脚本检查旧 composer 状态修改/跳控制台行为及重复入口不能回归；工程生成、iOS 14 检查和差异检查本地执行，Xcode 编译与 UI XCTest 以真实 macOS Actions 结果为准。iOS 14.8/16、TrollStore、真实 Key/模型/搜索服务、键盘与深色布局仍须人工实机验证，见 DEVICE_TEST_MATRIX.md。
+
+## 云端验收记录（2026-10-26，Asia/Singapore）
+
+- 已构建代码：`c6c435b4cb46a4c3695e4fc343946d455a8d406c`；[Actions 40214325589](https://github.com/AkiSenn/AkiChat/actions/runs/40214325589) 全部成功，正式 Release 步骤跳过。未创建 PR 或版本标签。
+- Xcode 16.4：Release iphoneos arm64、CODE_SIGNING_ALLOWED=NO 编译成功；105 项单元测试和 7 项 UI XCTest，零失败。UI 真正点击 thinking-button/search-button，验证键盘收起、灰色重开、档位变化、强制/未知模型、来源缺失、授权和关闭/自动/每次三种模式。旧长会话和模型切换测试通过。
+- [下载 AkiChat-iOS14 测试产物](https://github.com/AkiSenn/AkiChat/actions/runs/40214325589/artifacts/12607565782)。下载后独立核对 SHA256、ZIP/Payload、arm64 Mach-O、可执行权限、iPhoneOS、最低系统 14.0、Bundle ID、版本 1.2.0/build8、资源及签名状态。unsigned 3,666,899 字节，无代码签名；adhoc 3,702,164 字节，临时代码签名。均无开发者 provisioning profile。
+- unsigned SHA256：`7f11bdbe6009412638370f676126d515fd099216f90b4274e10d7752d0212389`；adhoc SHA256：`b8494b5b642ae4b05018bb937a4686a03ee3026664b97f0f4ad4ea55bde673a7`。
+- 实际模拟器为 iOS 18.5，Runner 没有可用 iOS 16。未测量 FPS。强度系统菜单的 XCTest 日志有两次等待动画完成通知超时，随后点击及状态断言通过；不能把测试等待时间当成实机操作延迟，也不能据此宣称实机流畅。菜单、键盘与弹层响应须在 iOS 14.8/16 真机确认。
+- 所有网络验证使用 Mock，没有使用真实用户密钥或产生搜索/模型费用。实际服务商能力、真实 Search/Fetch、TrollStore 安装及重启持久化仍按 DEVICE_TEST_MATRIX.md 人工验收。
+
+本节和 UI_UX_PLAN 状态同步为验证后的文档更新；IPA 对应上述已实际编译的代码提交。

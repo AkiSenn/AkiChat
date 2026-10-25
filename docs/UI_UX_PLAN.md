@@ -1,6 +1,6 @@
 # AkiChat UI/UX 融合需求与阶段验收
 
-融合“用户体验重构与五项核心功能修复”附件及“正式执行 UI/UX 优化计划”。两份要求同时保留；按正文明确的 A → B → C → D 顺序执行，先完成 A 的测试 IPA，再推进后续阶段。各阶段独立提交、PR 和 CI；不自动合并，不发布正式 Release，不更改 1.2.0 版本线、Bundle ID 或数据格式。
+融合“用户体验重构与五项核心功能修复”附件及“正式执行 UI/UX 优化计划”。两份要求同时保留；按正文明确的 A → B → C → D 顺序执行，先完成 A 的测试 IPA，再推进后续阶段。后续阶段直接通过 GitHub App 提交默认分支并运行 CI，不创建 PR；不发布正式 Release，不更改 1.2.0 版本线、Bundle ID 或数据格式。
 
 ## 审查结论
 
@@ -23,7 +23,7 @@
 
 ### 阶段 A 验证记录
 
-代码提交 `f55eae329665bc003e041c677195d400bb69c844`，独立 [PR #3](https://github.com/AkiSenn/AkiChat/pull/3)，未合并、未创建 Release。
+代码提交 `f55eae329665bc003e041c677195d400bb69c844`，阶段 A 经 [PR #3](https://github.com/AkiSenn/AkiChat/pull/3) 交付，现已合并；后续按交付硬规则直接提交默认分支，不创建 PR 或正式 Release。
 
 - [macOS Actions 40206905413](https://github.com/AkiSenn/AkiChat/actions/runs/40206905413)：全部成功，97 项单元测试及 4 项界面测试，零失败。新增 5 项 ProviderOnboardingTests 及欢迎页/三项表单 UI 测试通过。
 - Xcode 16.4 完成 Release iphoneos arm64 无签名编译；下载 [AkiChat-iOS14 产物](https://github.com/AkiSenn/AkiChat/actions/runs/40206905413/artifacts/12604725949) 后独立复核 SHA256、ZIP/Payload、Info.plist、arm64 Mach-O、可执行权限、iPhoneOS 平台、最低系统 14.0、版本 1.2.0/build8、资源和无 provisioning profile。unsigned 无代码签名，adhoc 含临时代码签名；均不是开发者证书签名。
@@ -33,7 +33,9 @@
 
 安装验收：下载产物解压，把 `AkiChat-iOS14-unsigned.ipa` 交给 TrollStore；若该安装器无法处理纯无签名包，使用同产物内的 adhoc 包。按上方 A 验收项检查后，再推进 B–D。
 
-## B：思考与联网独立面板（待实施）
+## B：思考与联网独立面板（本次紧急回归已实施）
+
+实际事件链、请求行为、105 项单元测试及 7 项 UI 测试、测试 IPA 和实机待验收项见 [FEATURE_PANEL_FIX.md](FEATURE_PANEL_FIX.md)。来源目前仅 DeepSeek；C、D 的后续功能不在此次修复中。
 
 - iOS 14 自定义底部面板，点击关闭/取消；关闭灰色但可点击，开启强调色，不能关闭明确说明。
 - 读取缓存元数据；必要时仅异步刷新当前服务商。推理档位来自声明，未知仅“默认（由模型决定）”；能力未知可经高级覆盖。保留 DeepSeek、Hub 及其他协议的独立参数适配。
