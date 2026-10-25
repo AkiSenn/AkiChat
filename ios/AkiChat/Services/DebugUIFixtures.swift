@@ -24,7 +24,7 @@ extension AppStore {
         let hubModel = ModelRecord(id: "deepseek-v4.1-flash", name: "Hub Flash")
         var messages = (0..<count).map { index in
             Message(role: index.isMultiple(of: 2) ? .user : .assistant,
-                    content: "������Ϣ \(index) �� **Markdown**\n\n```swift\nlet value = \(index)\n```\n\n���ǽ������ܼ��ʹ�õĺϳ����ݡ�")
+                    content: "测试消息 \(index) · **Markdown**\n\n```swift\nlet value = \(index)\n```\n\n这是界面性能检查使用的合成内容。")
         }
         if count == 500 {
             messages[count - 1].content += "\n\n```swift\n" + (0..<500).map { "let longCodeLine\($0) = \($0) // synthetic fixture" }.joined(separator: "\n") + "\n```"

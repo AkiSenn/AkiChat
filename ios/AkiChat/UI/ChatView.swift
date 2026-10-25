@@ -44,7 +44,7 @@ struct ChatView: View {
             case .providers:
                 NavigationView {
                     ProvidersView(onConfigured: { sheet = nil }).environmentObject(store)
-                        .navigationBarItems(trailing: Button("���") { sheet = nil })
+                        .navigationBarItems(trailing: Button("完成") { sheet = nil })
                 }.navigationViewStyle(StackNavigationViewStyle())
             case .models: modelPicker
             case .advanced: AdvancedConversationView().environmentObject(store)
@@ -61,7 +61,7 @@ struct ChatView: View {
             }
         }
         .alert(isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } })) {
-            Alert(title: Text("AkiChat"), message: Text(store.notice ?? ""), dismissButton: .default(Text("��")))
+            Alert(title: Text("AkiChat"), message: Text(store.notice ?? ""), dismissButton: .default(Text("好")))
         }
     }
     private func openPanel(_ destination: ChatSheet) {
@@ -71,18 +71,18 @@ struct ChatView: View {
     private func editSheet(_ message: Message) -> some View {
         NavigationView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("���ͺ��滻����Ϣ��������ش�ͼƬ�ᱣ����").font(.footnote).foregroundColor(.secondary)
+                    Text("发送后将替换该消息及其后续回答。图片会保留。").font(.footnote).foregroundColor(.secondary)
                     TextEditor(text: $editedText).padding(8).background(Theme.card).cornerRadius(12)
-                    Button("�༭�����·���") {
+                    Button("编辑并重新发送") {
                         store.editAndResend(message.id, text: editedText); sheet = nil
                     }.disabled(editedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && message.images.isEmpty)
-                }.padding().navigationTitle("�༭��Ϣ")
-                .navigationBarItems(trailing: Button("ȡ��") { sheet = nil })
+                }.padding().navigationTitle("编辑消息")
+                .navigationBarItems(trailing: Button("取消") { sheet = nil })
             }.navigationViewStyle(StackNavigationViewStyle())
     }
     private var header: some View {
         HStack(spacing: 12) {
-            IconButton(symbol: "line.horizontal.3", label: "�Ự����") {
+            IconButton(symbol: "line.horizontal.3", label: "会话抽屉") {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 withAnimation(.easeOut(duration: 0.22)) { showDrawer = true }
             }
@@ -100,7 +100,7 @@ struct ChatView: View {
                 }.foregroundColor(.primary)
             }.accessibilityIdentifier("model-selector")
             Spacer(minLength: 0)
-            IconButton(symbol: "square.and.pencil", label: "�½��Ի�") { store.newConversation() }
+            IconButton(symbol: "square.and.pencil", label: "新建对话") { store.newConversation() }
         }.padding(.horizontal, 18).padding(.vertical, 12).background(Theme.background)
     }
     private var messageList: some View {
@@ -113,14 +113,14 @@ struct ChatView: View {
         VStack(alignment: .leading, spacing: 20) {
             Spacer().frame(height: 55)
             Image(systemName: "sparkles").font(.system(size: 36)).foregroundColor(Theme.accent)
-            Text("���뷨��\n����չ����").font(.system(.largeTitle, design: .rounded)).bold()
-            Text("д����̽�������⡣\n��һ�����⿪ʼ�������м�ֵ�ĶԻ���")
+            Text("让想法，\n慢慢展开。").font(.system(.largeTitle, design: .rounded)).bold()
+            Text("写作、探索、理解。\n从一个问题开始，留下有价值的对话。")
                 .foregroundColor(.secondary).font(.system(size: 16)).lineSpacing(6)
             Button { sheet = .providers } label: {
-                Label("������� API", systemImage: "slider.horizontal.3").padding(14)
+                Label("配置你的 API", systemImage: "slider.horizontal.3").padding(14)
                     .background(Theme.card).cornerRadius(14)
             }.accessibilityIdentifier("configure-api")
-            Text("��Կ�������豸 Keychain�������¼�����ڱ�����").font(.caption).foregroundColor(.secondary)
+            Text("密钥保存在设备 Keychain，聊天记录保存在本机。").font(.caption).foregroundColor(.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private var modelPicker: some View {

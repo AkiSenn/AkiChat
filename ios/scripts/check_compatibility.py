@@ -35,7 +35,7 @@ def main():
         text = (ROOT / "AkiChat/UI" / filename).read_text(encoding="utf-8")
         assert "ReasoningControls()" not in text, filename
     console = (ROOT / "AkiChat/UI/AdvancedConversationView.swift").read_text(encoding="utf-8")
-    for duplicate in ["searchMode", "searchProviderID", "searchConsent", "ģ��˼������", "ReasoningControls"]:
+    for duplicate in ["searchMode", "searchProviderID", "searchConsent", "模型思考设置", "ReasoningControls"]:
         assert duplicate not in console, duplicate
     assert not list(ROOT.rglob("Package.resolved")), "Review deployment targets and licenses before adding packages"
     print("iOS 14 source/project checks passed (compiler availability checking still required)")

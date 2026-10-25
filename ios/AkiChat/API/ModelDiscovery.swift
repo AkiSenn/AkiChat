@@ -10,7 +10,7 @@ enum ModelDiscovery {
         let parsed: Any
         do { parsed = try JSONSerialization.jsonObject(with: data) } catch { throw AppError.malformed }
         guard let object = parsed as? [String: Any], let rows = object["data"] as? [[String: Any]] else { throw AppError.malformed }
-        guard rows.count <= 5000 else { throw AppError.validation("ģ���б����� 5000 ��") }
+        guard rows.count <= 5000 else { throw AppError.validation("模型列表超过 5000 条") }
         var ids = Set<String>()
         return rows.compactMap { row in
             guard let id = row["id"] as? String, !id.isEmpty, id.count <= 256, ids.insert(id).inserted else { return nil }

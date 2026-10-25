@@ -131,7 +131,7 @@ final class FeaturePanelTests: XCTestCase {
                     DispatchQueue.main.async { completion(.success(reply)) }
                 }
             }, update: { _, _ in }, completion: { result in
-                if mode == .automatic { guard case .failure(let error) = result else { return XCTFail("Must reject unsupported auto") }; XCTAssertTrue(error.localizedDescription.contains("�Զ�")) }
+                if mode == .automatic { guard case .failure(let error) = result else { return XCTFail("Must reject unsupported auto") }; XCTAssertTrue(error.localizedDescription.contains("自动")) }
                 done.fulfill()
             })
             run.start(); wait(for: [done], timeout: 3)
@@ -177,7 +177,7 @@ final class FeaturePanelTests: XCTestCase {
             store.setDraft("question"); store.send(); wait(for: [done], timeout: 3); sink.cancel()
             XCTAssertEqual(factoryCalls, consent ? 1 : 0); XCTAssertEqual(search.queries.count, consent ? 1 : 0)
             XCTAssertEqual(store.messages.first?.content, "question")
-            if !consent { XCTAssertTrue(store.generationStatus.contains("ͬ��")) }
+            if !consent { XCTAssertTrue(store.generationStatus.contains("同意")) }
         }
     }
 }
