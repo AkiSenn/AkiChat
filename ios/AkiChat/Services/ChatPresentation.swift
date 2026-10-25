@@ -10,6 +10,9 @@ final class MessageCell: ObservableObject, Identifiable {
 
 /// Stable row objects: token snapshots notify only the current row, not the session list.
 final class ChatPresentation: ObservableObject {
+    #if DEBUG
+    private(set) var reconciliationCount = 0
+    #endif
     @Published private(set) var rows: [MessageCell] = []
     @Published private(set) var sessionID: UUID?
     @Published private(set) var scrollRequest = 0
@@ -25,6 +28,9 @@ final class ChatPresentation: ObservableObject {
         } else { reconcile(messages) }
     }
     func reconcile(_ messages: [Message]) {
+        #if DEBUG
+        reconciliationCount += 1
+        #endif
         var next: [UUID: MessageCell] = [:]
         for message in messages where message.role != .tool {
             let cell = cells[message.id] ?? MessageCell(message)

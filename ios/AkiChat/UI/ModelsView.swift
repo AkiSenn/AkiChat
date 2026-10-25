@@ -9,7 +9,7 @@ struct ModelsView: View {
     @State private var editing: ModelRecord?
     @State private var deleting: ModelRecord?
     var sorted: [ModelRecord] {
-        ModelDiscovery.filtered(store.models(for: providerID), query: query)
+        store.filteredModels(for: providerID, query: query)
     }
     var body: some View {
         ScrollView {

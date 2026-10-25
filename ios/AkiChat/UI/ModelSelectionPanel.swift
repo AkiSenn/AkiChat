@@ -7,7 +7,7 @@ struct ModelSelectionPanel: View {
     @State private var favoritesOnly = false
     private var matchingProviders: [Provider] {
         store.providers.filter { provider in
-            query.isEmpty || provider.name.localizedCaseInsensitiveContains(query) || store.models(for: provider.id).contains { $0.id.localizedCaseInsensitiveContains(query) || $0.name.localizedCaseInsensitiveContains(query) }
+            query.isEmpty || provider.name.localizedCaseInsensitiveContains(query) || !store.filteredModels(for: provider.id, query: query).isEmpty
         }
     }
     var body: some View {
@@ -35,11 +35,11 @@ private struct ProviderModelSection: View {
     let query: String
     let favoritesOnly: Bool
     let dismiss: () -> Void
-    private var models: [ModelRecord] {
-        ModelDiscovery.filtered(store.models(for: provider.id), query: provider.name.localizedCaseInsensitiveContains(query) ? "" : query, favoritesOnly: favoritesOnly)
-    }
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 10) {
+        let models = store.filteredModels(for: provider.id, query: provider.name.localizedCaseInsensitiveContains(query) ? "" : query, favoritesOnly: favoritesOnly)
+        let selectedProviderID = store.current?.providerID
+        let selectedModelID = store.current?.options.modelID ?? provider.modelID
+        return LazyVStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(provider.name).font(.headline).lineLimit(2)
                 Spacer()
@@ -64,7 +64,7 @@ private struct ProviderModelSection: View {
                                 Text(model.id).font(.caption).foregroundColor(.secondary).lineLimit(2)
                                 Text(model.manual ? "手动添加" : "模型目录").font(.caption2).foregroundColor(.secondary)
                             }.frame(maxWidth: .infinity, alignment: .leading)
-                            if store.current?.providerID == provider.id && (store.current?.options.modelID ?? provider.modelID) == model.id {
+                            if selectedProviderID == provider.id && selectedModelID == model.id {
                                 Image(systemName: "checkmark.circle.fill").foregroundColor(Theme.accent).accessibilityLabel("当前模型")
                             }
                         }.foregroundColor(.primary).padding(.vertical, 12).padding(.leading, 14)

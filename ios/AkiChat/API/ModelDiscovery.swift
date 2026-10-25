@@ -42,9 +42,13 @@ enum ModelDiscovery {
         }
     }
     static func merge(_ fetched: [ModelRecord], cached: [ModelRecord]) -> [ModelRecord] {
+        // Keep the first cached duplicate, matching the former first(where:) rule.
+        var byID: [String: ModelRecord] = [:]
+        for model in cached where byID[model.id] == nil { byID[model.id] = model }
+        let fetchedIDs = Set(fetched.map(\.id))
         var result = fetched.map { remote -> ModelRecord in
             var value = remote
-            if let old = cached.first(where: { $0.id == remote.id }) {
+            if let old = byID[remote.id] {
                 value.favorite = old.favorite; value.order = old.order; value.overrides = old.overrides
                 value.manual = old.manual
                 value.systemPrompt = old.systemPrompt; value.presetIDs = old.presetIDs
@@ -54,7 +58,7 @@ enum ModelDiscovery {
             return value
         }
         // Preserve missing models too, so refresh never destroys a working local configuration.
-        result += cached.filter { old in !result.contains(where: { $0.id == old.id }) }
+        result += cached.filter { !fetchedIDs.contains($0.id) }
         return result
     }
 }

@@ -4,13 +4,13 @@ import UIKit
 
 /// All published state is mutated on main; database work runs serially off main.
 final class AppStore: ObservableObject {
-    @Published private(set) var conversations: [Conversation] = []
-    @Published private(set) var providers: [Provider] = []
-    @Published private(set) var settings = AppSettings()
+    @Published private(set) var conversations: [Conversation] = [] { didSet { dirtyRecords.insert(.conversations) } }
+    @Published private(set) var providers: [Provider] = [] { didSet { dirtyRecords.insert(.providers); modelListCache.invalidate() } }
+    @Published private(set) var settings = AppSettings() { didSet { dirtyRecords.insert(.settings) } }
     @Published private(set) var selectedID: UUID?
     @Published private(set) var isGenerating = false
     @Published private(set) var renderRevision = 0
-    @Published private(set) var catalogs: [ModelCatalog] = []
+    @Published private(set) var catalogs: [ModelCatalog] = [] { didSet { dirtyRecords.insert(.catalogs); modelListCache.invalidate() } }
     @Published private(set) var refreshingModels: Set<UUID> = []
     @Published private(set) var modelErrors: [UUID: String] = [:]
     @Published private(set) var generationStatus = ""
@@ -23,11 +23,19 @@ final class AppStore: ObservableObject {
         let id = current?.options.modelID ?? providers.first { $0.id == current?.providerID }?.modelID ?? ""
         return id.isEmpty ? "选择模型" : id
     }
-    private var database: LocalDatabase?
+    private enum RecordKey: String, CaseIterable {
+        case conversations = "conversations.v1", providers = "providers.v1", settings = "settings.v1", catalogs = "catalogs.v2"
+    }
+    private var dirtyRecords = Set(RecordKey.allCases)
+    private var database: RecordDatabase?
+    private let modelListCache = ModelListCache()
     private let disk = DispatchQueue(label: "app.akichat.persistence", qos: .utility)
     private var run: ChatRun?
     private var compression: Cancellable?
     private var modelRequests: [UUID: JSONHTTPClient] = [:]
+    private var modelOperations: [UUID: BlockOperation] = [:]
+    private var catalogVersions: [UUID: Int] = [:]
+    private let catalogWorker: CatalogWorker
     private let modelConfiguration: () -> URLSessionConfiguration
     private let senderFactory: () -> ChatRequestSending
     private var generationID: UUID?
@@ -46,14 +54,18 @@ final class AppStore: ObservableObject {
     var draftImages: [Attachment] { composer.images }
     var thinking: Bool { current?.thinking ?? true }
     var effort: ReasoningEffort { current?.effort ?? .high }
-    init(database suppliedDatabase: LocalDatabase? = nil, modelConfiguration: @escaping () -> URLSessionConfiguration = { .ephemeral }, senderFactory: @escaping () -> ChatRequestSending = { ChatTransport() }) {
-        self.modelConfiguration = modelConfiguration; self.senderFactory = senderFactory
+    init(database suppliedDatabase: RecordDatabase? = nil, modelConfiguration: @escaping () -> URLSessionConfiguration = { .ephemeral }, senderFactory: @escaping () -> ChatRequestSending = { ChatTransport() }, catalogWorker: CatalogWorker = CatalogWorker()) {
+        self.modelConfiguration = modelConfiguration; self.senderFactory = senderFactory; self.catalogWorker = catalogWorker
         do {
+            let db: RecordDatabase
+            if let supplied = suppliedDatabase { db = supplied }
+            else {
             #if DEBUG
-            let db = try suppliedDatabase ?? Self.uiFixtureDatabase() ?? LocalDatabase()
+                db = try Self.uiFixtureDatabase() ?? LocalDatabase()
             #else
-            let db = try suppliedDatabase ?? LocalDatabase()
+                db = try LocalDatabase()
             #endif
+            }
             // Decode everything before enabling writes; never overwrite an unreadable store.
             providers = (try db.load("providers.v1", as: [Provider].self) ?? [.deepSeek, .openAI]).map(ProviderNaming.normalize)
             catalogs = try db.load("catalogs.v2", as: [ModelCatalog].self) ?? []
@@ -77,22 +89,23 @@ final class AppStore: ObservableObject {
         lifecycle = NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification).sink { [weak self] _ in
             guard let self = self else { return }
             self.backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Save conversation") { [weak self] in self?.endBackgroundTask() }
-            self.stop(); self.persist(immediate: true)
-            self.disk.async { DispatchQueue.main.async { self.endBackgroundTask() } }
+            self.stop(); self.flushPersistence { self.endBackgroundTask() }
         }
         persist()
     }
     private func endBackgroundTask() {
         if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask); backgroundTask = .invalid }
     }
-    private func mutate(_ action: (inout Conversation) -> Void) {
+    private func mutate(messagesChanged: Bool = true, _ action: (inout Conversation) -> Void) {
         guard let i = conversations.firstIndex(where: { $0.id == selectedID }) else { return }
         let oldProvider = conversations[i].providerID, oldModel = conversations[i].options.modelID
         action(&conversations[i]); renderRevision += 1
-        chat.reconcile(conversations[i].messages)
+        if messagesChanged { chat.reconcile(conversations[i].messages) }
         if conversations[i].providerID != oldProvider || conversations[i].options.modelID != oldModel { resolveProvider() }
     }
-    func setDraft(_ value: String) { composer.text = value; persist() }
+    func setDraft(_ value: String) {
+        composer.text = value; dirtyRecords.insert(.conversations); persist()
+    }
     private func commitDraft() {
         guard let i = conversations.firstIndex(where: { $0.id == selectedID }),
               conversations[i].draft != composer.text || conversations[i].draftImages != composer.images else { return }
@@ -102,9 +115,9 @@ final class AppStore: ObservableObject {
     private func loadSelection() {
         composer.load(current); chat.select(selectedID, messages: messages); resolveProvider()
     }
-    func setThinking(_ value: Bool) { mutate { $0.thinking = value }; persist() }
-    func setEffort(_ value: ReasoningEffort) { mutate { $0.effort = value }; persist() }
-    func updateConversationOption<T>(_ path: WritableKeyPath<ConversationOptions, T>, _ value: T) { mutate { $0.options[keyPath: path] = value }; persist() }
+    func setThinking(_ value: Bool) { mutate(messagesChanged: false) { $0.thinking = value }; persist() }
+    func setEffort(_ value: ReasoningEffort) { mutate(messagesChanged: false) { $0.effort = value }; persist() }
+    func updateConversationOption<T>(_ path: WritableKeyPath<ConversationOptions, T>, _ value: T) { mutate(messagesChanged: false) { $0.options[keyPath: path] = value }; persist() }
     func updateGlobalOption<T>(_ path: WritableKeyPath<GlobalOptions, T>, _ value: T) { settings.options[keyPath: path] = value; persist() }
     var contextPlan: ContextPlan? {
         guard let p = provider, let c = current else { return nil }
@@ -124,11 +137,11 @@ final class AppStore: ObservableObject {
         conversations.insert(c, at: 0); selectedID = c.id; loadSelection(); renderRevision += 1; persist(immediate: true)
     }
     func selectConversation(_ id: UUID) { stop(); commitDraft(); selectedID = id; loadSelection(); renderRevision += 1; persist(immediate: true) }
-    func selectProvider(_ id: UUID) { guard !isGenerating else { return }; mutate { $0.providerID = id; $0.options.modelID = nil }; persist() }
+    func selectProvider(_ id: UUID) { guard !isGenerating else { return }; mutate(messagesChanged: false) { $0.providerID = id; $0.options.modelID = nil }; persist() }
     func selectModel(providerID: UUID, modelID: String) {
         guard !isGenerating, let base = providers.first(where: { $0.id == providerID }), let model = models(for: providerID).first(where: { $0.id == modelID }) else { return }
         let resolved = model.apply(to: base)
-        mutate {
+        mutate(messagesChanged: false) {
             $0.providerID = providerID; $0.options.modelID = modelID; $0.options.context.calibration = nil
             if !resolved.supportsThinking { $0.thinking = false }
             if !resolved.options.supportsTools { $0.options.toolsEnabled = false; $0.options.searchMode = .off }
@@ -143,6 +156,9 @@ final class AppStore: ObservableObject {
         m.discovered = ModelCapabilities(vision: p.supportsVision, thinking: p.supportsThinking, tools: p.options.supportsTools, streaming: p.supportsStreaming, systemPrompt: p.options.supportsSystem, prefix: p.options.supportsPrefix)
         return [m]
     }
+    func filteredModels(for id: UUID, query: String, favoritesOnly: Bool = false) -> [ModelRecord] {
+        modelListCache.models(for: id, source: { self.models(for: id) }, query: query, favoritesOnly: favoritesOnly)
+    }
     func saveModel(_ model: ModelRecord, providerID: UUID) {
         var catalog = catalogs.first(where: { $0.id == providerID }) ?? ModelCatalog(id: providerID, models: models(for: providerID))
         if let index = catalog.models.firstIndex(where: { $0.id == model.id }) { catalog.models[index] = model }
@@ -156,10 +172,36 @@ final class AppStore: ObservableObject {
         resolveProvider(); persist(immediate: true)
     }
     private func replaceCatalog(_ value: ModelCatalog) {
+        catalogVersions[value.id, default: 0] += 1
         if let i = catalogs.firstIndex(where: { $0.id == value.id }) { catalogs[i] = value } else { catalogs.append(value) }
         resolveProvider(); persist(immediate: true)
     }
-    func cancelModelRefresh(_ id: UUID) { modelRequests.removeValue(forKey: id)?.cancel(); refreshingModels.remove(id) }
+    func cancelModelRefresh(_ id: UUID) {
+        modelRequests.removeValue(forKey: id)?.cancel()
+        modelOperations.removeValue(forKey: id)?.cancel()
+        refreshingModels.remove(id)
+    }
+    private func finishModelRefresh(_ id: UUID, client: JSONHTTPClient, error: Error? = nil) {
+        guard modelRequests[id] === client else { return }
+        modelRequests[id] = nil; modelOperations[id] = nil; refreshingModels.remove(id)
+        if let error = error { modelErrors[id] = error.localizedDescription }
+    }
+    private func mergeFetchedModels(_ fetched: [ModelRecord], id: UUID, client: JSONHTTPClient, attempt: Int = 0) {
+        guard modelRequests[id] === client else { return }
+        let cached = models(for: id), version = catalogVersions[id, default: 0]
+        modelOperations[id] = catalogWorker.submit({ ModelDiscovery.merge(fetched, cached: cached) }) { [weak self] merged in
+            guard let self = self, self.modelRequests[id] === client else { return }
+            if self.catalogVersions[id, default: 0] != version {
+                guard attempt < 3 else {
+                    self.finishModelRefresh(id, client: client, error: AppError.validation("本地模型配置持续变化，已保留当前配置；请稍后重试刷新。")); return
+                }
+                self.mergeFetchedModels(fetched, id: id, client: client, attempt: attempt + 1)
+                return
+            }
+            self.finishModelRefresh(id, client: client)
+            self.replaceCatalog(ModelCatalog(id: id, models: merged, syncedAt: Date()))
+        }
+    }
     func refreshModels(_ id: UUID, onlyIfNeeded: Bool = false) {
         guard let p = providers.first(where: { $0.id == id }), !refreshingModels.contains(id) else { return }
         if onlyIfNeeded && (catalogs.first(where: { $0.id == id })?.syncedAt != nil || (try? KeychainStore.read(p.apiKeyReference)) == nil) { return }
@@ -168,12 +210,17 @@ final class AppStore: ObservableObject {
             let client = JSONHTTPClient(); modelRequests[id] = client; refreshingModels.insert(id); modelErrors[id] = nil
             client.start(request, configuration: modelConfiguration()) { [weak self] result in
                 guard let self = self, self.modelRequests[id] === client else { return }
-                self.modelRequests[id] = nil; self.refreshingModels.remove(id)
                 do {
-                    let fetched = try ModelDiscovery.parse(result.get(), provider: p)
-                    guard !fetched.isEmpty else { throw AppError.validation("模型列表为空，已保留本地配置。") }
-                    self.replaceCatalog(ModelCatalog(id: id, models: ModelDiscovery.merge(fetched, cached: self.models(for: id)), syncedAt: Date()))
-                } catch { self.modelErrors[id] = error.localizedDescription }
+                    let data = try result.get()
+                    self.modelOperations[id] = self.catalogWorker.submit({ Result { try ModelDiscovery.parse(data, provider: p) } }) { [weak self] parsed in
+                        guard let self = self, self.modelRequests[id] === client else { return }
+                        do {
+                            let fetched = try parsed.get()
+                            guard !fetched.isEmpty else { throw AppError.validation("模型列表为空，已保留本地配置。") }
+                            self.mergeFetchedModels(fetched, id: id, client: client)
+                        } catch { self.finishModelRefresh(id, client: client, error: error) }
+                    }
+                } catch { self.finishModelRefresh(id, client: client, error: error) }
             }
         } catch { modelErrors[id] = error.localizedDescription }
     }
@@ -198,9 +245,9 @@ final class AppStore: ObservableObject {
     func clearAll() { stop(); conversations = []; newConversation(); persist(immediate: true) }
     func addImage(_ image: Attachment) {
         guard draftImages.count < 4 else { notice = "每条消息最多添加 4 张图片"; return }
-        composer.images.append(image); persist()
+        composer.images.append(image); dirtyRecords.insert(.conversations); persist()
     }
-    func removeImage(_ id: UUID) { composer.images.removeAll { $0.id == id }; persist() }
+    func removeImage(_ id: UUID) { composer.images.removeAll { $0.id == id }; dirtyRecords.insert(.conversations); persist() }
     func send() {
         guard !isGenerating else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -276,7 +323,7 @@ final class AppStore: ObservableObject {
                 if let latest = self.run?.conversation.messages { self.mutate { $0.messages = latest; $0.updatedAt = Date() } }
                 if case .success(let messages) = result, let actual = messages.last?.usage?.prompt_tokens,
                    let estimate = self.run?.lastPromptEstimate, estimate > 0 {
-                    self.mutate { c in c.options.context.calibration = min(2, max(0.5, (c.options.context.calibration ?? 1) * Double(actual) / Double(estimate))) }
+                    self.mutate(messagesChanged: false) { c in c.options.context.calibration = min(2, max(0.5, (c.options.context.calibration ?? 1) * Double(actual) / Double(estimate))) }
                 }
                 if case .failure(let error) = result, (error as? URLError)?.code != .cancelled { self.generationStatus = error.localizedDescription }
                 self.isGenerating = false; self.generationID = nil; self.run = nil; self.persist(immediate: true)
@@ -308,7 +355,7 @@ final class AppStore: ObservableObject {
                 self.compression = nil
                 switch result {
                 case .success(let version):
-                    self.mutate { c in
+                    self.mutate(messagesChanged: false) { c in
                         if c.summaries == nil { c.summaries = [] }
                         c.summaries?.append(version); c.activeSummaryID = version.id
                         if !continueChat { c.options.context.strategy = .summary }
@@ -325,7 +372,7 @@ final class AppStore: ObservableObject {
             else { isGenerating = false; generationID = nil }
         }
     }
-    func activateSummary(_ id: UUID?) { mutate { $0.activeSummaryID = id }; persist(immediate: true) }
+    func activateSummary(_ id: UUID?) { mutate(messagesChanged: false) { $0.activeSummaryID = id }; persist(immediate: true) }
     func rollbackSummary() {
         guard let c = current, let versions = c.summaries, let index = versions.firstIndex(where: { $0.id == c.activeSummaryID }) else { return }
         activateSummary(index > 0 ? versions[index - 1].id : nil)
@@ -405,14 +452,37 @@ final class AppStore: ObservableObject {
     private func saveNow() {
         guard let database = database else { return }
         commitDraft()
-        let conversations = conversations, providers = providers, settings = settings, catalogs = catalogs
+        let keys = dirtyRecords
+        guard !keys.isEmpty else { return }
+        dirtyRecords.subtract(keys)
+        let conversationSnapshot: [Conversation]? = keys.contains(.conversations) ? conversations : nil
+        let providerSnapshot: [Provider]? = keys.contains(.providers) ? providers : nil
+        let settingSnapshot: AppSettings? = keys.contains(.settings) ? settings : nil
+        let catalogSnapshot: [ModelCatalog]? = keys.contains(.catalogs) ? catalogs : nil
         disk.async { [weak self] in
+            var remaining = keys
             do {
-                try database.save(conversations, key: "conversations.v1")
-                try database.save(providers, key: "providers.v1")
-                try database.save(settings, key: "settings.v1")
-                try database.save(catalogs, key: "catalogs.v2")
-            } catch { DispatchQueue.main.async { self?.notice = "本地保存失败，请及时导出备份。" } }
+                for key in RecordKey.allCases where keys.contains(key) {
+                    switch key {
+                    case .conversations: try database.save(conversationSnapshot!, key: key.rawValue)
+                    case .providers: try database.save(providerSnapshot!, key: key.rawValue)
+                    case .settings: try database.save(settingSnapshot!, key: key.rawValue)
+                    case .catalogs: try database.save(catalogSnapshot!, key: key.rawValue)
+                    }
+                    remaining.remove(key)
+                }
+            } catch {
+                let retry = remaining
+                DispatchQueue.main.async {
+                    self?.dirtyRecords.formUnion(retry)
+                    self?.notice = "本地保存失败，请及时导出备份。"
+                }
+            }
         }
+    }
+    /// Flush the current buffer and wait behind all already-enqueued serial writes.
+    func flushPersistence(completion: @escaping () -> Void = {}) {
+        persist(immediate: true)
+        disk.async { DispatchQueue.main.async(execute: completion) }
     }
 }

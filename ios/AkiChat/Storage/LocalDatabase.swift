@@ -1,7 +1,12 @@
 import CoreData
 
+protocol RecordDatabase: AnyObject {
+    func load<T: Decodable>(_ key: String, as type: T.Type) throws -> T?
+    func save<T: Encodable>(_ value: T, key: String) throws
+}
+
 /// Versioned Codable records in a Core Data SQLite store, with no runtime dependencies.
-final class LocalDatabase {
+final class LocalDatabase: RecordDatabase {
     private let container: NSPersistentContainer
     private let context: NSManagedObjectContext
     init(url: URL? = nil, inMemory: Bool = false) throws {
