@@ -24,6 +24,25 @@ StateOptimizationBenchmarks在同一模拟器进程里交替比较4组样本：
 
 日志标记为 `STATE_OPTIMIZATION_BENCHMARK`。计时为Debug/-Onone的局部工作量，不是FPS、实机延迟或完整键盘交互的提升比例。DEBUG计数器不通知UI，Release中不包含它们。具体测量数值与CI链接以本次实际日志为准。
 
+## 本轮实际结果
+
+代码提交 `b62698ebe4ba87d6a05e3ded1399dcc887892b0a` 的 [Actions 40195457632](https://github.com/AkiSenn/AkiChat/actions/runs/40195457632) 全部通过：arm64真机Release编译、iOS14部署与打包校验、92项单元测试、3项原生UI测试，零失败。实际模拟器为iOS18.5，未安装iOS16。
+
+同进程Debug/-Onone、交替顺序、4组中位数，单位ms：
+
+| 工作负载 | 旧路径 | 优化路径 |
+|---|---:|---:|
+| 100条消息，24次模型切换状态处理 | 12.34 | 1.32 |
+| 500条消息，24次模型切换状态处理 | 56.25 | 2.07 |
+| 1000模型，20次列表读取（含首次建缓存） | 55.17 | 2.33 |
+| 2000远端/2000缓存模型合并 | 1016.17 | 5.26 |
+
+对应的历史reconcile为24→0次，列表排序为20→1次。保存基准中，单独改设置的编码量为879505→1150字节，草稿保存为879517→663172字节，写入记录均为4→1。初始化全量保存不计入这组逐次修改结果；没有把JSON编码字节数称为SQLite写盘字节数。
+
+这是局部算法/状态路径对照，不是两份完整App的端到端对比。旧模型切换基线由同一选择操作加原有reconcile构成，未测量FPS、实机动画、网络延迟或整页响应时间。
+
+[测试IPA与runtime报告](https://github.com/AkiSenn/AkiChat/actions/runs/40195457632/artifacts/12600061394) 已下载复核Artifact及IPA校验和、ZIP/Payload、arm64/iPhoneOS、MinimumOSVersion14.0、版本1.2.0/build8和签名状态。[完整日志与xcresult](https://github.com/AkiSenn/AkiChat/actions/runs/40195457632/artifacts/12599821906) 可复核全部样本。该包来自未发布的优化提交，不替换GitHub Release中既有的1.2.0资产。
+
 ## 设备验证
 
 继续使用既有macOS Actions做arm64真机构建、单元和原生UI回归；记录实际模拟器运行时。Windows不能执行Xcode，较新模拟器不冒充iOS14.8/iOS16实机。空白会话键盘、面板动画、长历史实机滚动、真实Key、内存压力下缓存重建和升级数据回归仍需设备确认。
