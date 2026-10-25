@@ -7,7 +7,9 @@ enum ModelDiscovery {
             .sorted { a, b in a.favorite != b.favorite ? a.favorite : (a.order != b.order ? a.order < b.order : a.name.localizedStandardCompare(b.name) == .orderedAscending) }
     }
     static func parse(_ data: Data, provider: Provider) throws -> [ModelRecord] {
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], let rows = object["data"] as? [[String: Any]] else { throw AppError.malformed }
+        let parsed: Any
+        do { parsed = try JSONSerialization.jsonObject(with: data) } catch { throw AppError.malformed }
+        guard let object = parsed as? [String: Any], let rows = object["data"] as? [[String: Any]] else { throw AppError.malformed }
         guard rows.count <= 5000 else { throw AppError.validation("模型列表超过 5000 条") }
         var ids = Set<String>()
         return rows.compactMap { row in

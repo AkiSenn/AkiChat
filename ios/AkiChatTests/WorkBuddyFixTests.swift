@@ -111,7 +111,7 @@ final class WorkBuddyFixTests: XCTestCase {
             }
             let done = expectation(description: "failed discovery \(code)")
             var sink: AnyCancellable?
-            sink = store.$modelErrors.dropFirst().sink { errors in if errors[provider.id] != nil { done.fulfill() } }
+            sink = store.$modelIssues.dropFirst().sink { errors in if errors[provider.id] != nil { done.fulfill() } }
             store.refreshModels(provider.id)
             wait(for: [done], timeout: 3); sink?.cancel()
             XCTAssertEqual(store.models(for: provider.id), [manual])

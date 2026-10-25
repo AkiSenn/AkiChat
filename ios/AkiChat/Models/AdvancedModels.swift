@@ -40,6 +40,14 @@ extension Provider {
         }
         set { advanced = newValue }
     }
+    /// Only new generic configurations adopt /v1; existing saved endpoint paths stay unchanged.
+    static var newCompatible: Provider {
+        var value = Provider(name: "", baseURL: "https://", modelID: "", displayName: "")
+        var options = value.options
+        options.chatPath = "/v1/chat/completions"; options.modelsPath = "/v1/models"
+        value.options = options
+        return value
+    }
     static let openAI = Provider(name: "OpenAI", baseURL: "https://api.openai.com/v1", modelID: "", displayName: "手动选择 OpenAI 模型")
     static let workBuddy = Provider(name: "WorkBuddy2API Hub", baseURL: "https://", modelID: "", displayName: "请选择 WorkBuddy 模型", kind: .workBuddy, requestsStreamingUsage: true)
 }

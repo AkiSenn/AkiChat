@@ -12,7 +12,8 @@ final class AppStore: ObservableObject {
     @Published private(set) var renderRevision = 0
     @Published private(set) var catalogs: [ModelCatalog] = [] { didSet { dirtyRecords.insert(.catalogs); modelListCache.invalidate() } }
     @Published private(set) var refreshingModels: Set<UUID> = []
-    @Published private(set) var modelErrors: [UUID: String] = [:]
+    @Published private(set) var modelIssues: [UUID: ModelDiscoveryIssue] = [:]
+    var modelErrors: [UUID: String] { modelIssues.mapValues(\.message) }
     @Published private(set) var generationStatus = ""
     @Published var notice: String?
     let chat = ChatPresentation()
@@ -184,7 +185,7 @@ final class AppStore: ObservableObject {
     private func finishModelRefresh(_ id: UUID, client: JSONHTTPClient, error: Error? = nil) {
         guard modelRequests[id] === client else { return }
         modelRequests[id] = nil; modelOperations[id] = nil; refreshingModels.remove(id)
-        if let error = error { modelErrors[id] = error.localizedDescription }
+        if let error = error { modelIssues[id] = ModelDiscoveryIssue(error) }
     }
     private func mergeFetchedModels(_ fetched: [ModelRecord], id: UUID, client: JSONHTTPClient, attempt: Int = 0) {
         guard modelRequests[id] === client else { return }
@@ -207,7 +208,7 @@ final class AppStore: ObservableObject {
         if onlyIfNeeded && (catalogs.first(where: { $0.id == id })?.syncedAt != nil || (try? KeychainStore.read(p.apiKeyReference)) == nil) { return }
         do {
             let request = try JSONHTTPClient.request(url: Endpoint.url(p.baseURL, path: p.options.modelsPath, allowLANHTTP: p.kind == .workBuddy && (p.options.workBuddy?.allowLANHTTP ?? false)), key: KeychainStore.read(p.apiKeyReference) ?? "", timeout: p.options.timeout, headers: p.customHeaders)
-            let client = JSONHTTPClient(); modelRequests[id] = client; refreshingModels.insert(id); modelErrors[id] = nil
+            let client = JSONHTTPClient(); modelRequests[id] = client; refreshingModels.insert(id); modelIssues[id] = nil
             client.start(request, configuration: modelConfiguration()) { [weak self] result in
                 guard let self = self, self.modelRequests[id] === client else { return }
                 do {
@@ -222,7 +223,7 @@ final class AppStore: ObservableObject {
                     }
                 } catch { self.finishModelRefresh(id, client: client, error: error) }
             }
-        } catch { modelErrors[id] = error.localizedDescription }
+        } catch { modelIssues[id] = ModelDiscoveryIssue(error) }
     }
     func rename(_ id: UUID, title: String) {
         guard let i = conversations.firstIndex(where: { $0.id == id }) else { return }
@@ -397,18 +398,48 @@ final class AppStore: ObservableObject {
         mutate { c in for i in c.messages.indices where c.messages[i].state == .generating { c.messages[i].state = .stopped } }
         persist(immediate: true)
     }
-    func saveProvider(_ value: Provider, newKey: String?, deleteKey: Bool = false) throws {
-        _ = try Endpoint.chatURL(value.baseURL, path: value.options.chatPath, allowLANHTTP: value.kind == .workBuddy && (value.options.workBuddy?.allowLANHTTP ?? false))
-        guard !value.name.isEmpty, !value.displayName.isEmpty else { throw AppError.validation("请填写服务商名称与显示名称") }
-        guard value.customHeaders.keys.allSatisfy(RequestBuilder.safeHeader) else { throw AppError.validation("自定义 Header 只能包含非敏感字段") }
+    /// Name, address and a Keychain credential are sufficient; a model is chosen after discovery.
+    func saveProvider(_ input: Provider, newKey: String?, deleteKey: Bool = false) throws {
+        var value = input
+        value.name = value.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        value.baseURL = value.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        value.modelID = value.modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        value.displayName = value.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.displayName.isEmpty { value.displayName = value.modelID }
+        let allowLAN = value.kind == .workBuddy && (value.options.workBuddy?.allowLANHTTP ?? false)
+        _ = try Endpoint.chatURL(value.baseURL, path: value.options.chatPath, allowLANHTTP: allowLAN)
+        _ = try Endpoint.url(value.baseURL, path: value.options.modelsPath, allowLANHTTP: allowLAN)
+        guard !value.name.isEmpty else { throw AppError.validation("请填写服务商名称") }
+        guard value.customHeaders.allSatisfy({ RequestBuilder.safeHeader($0.key) && !$0.value.contains("\r") && !$0.value.contains("\n") }) else { throw AppError.validation("自定义 Header 只能包含非敏感字段，且不能换行") }
         guard database != nil else { throw AppError.storage("数据库不可用，无法保存配置") }
         if deleteKey { try KeychainStore.delete(value.apiKeyReference) }
-        else if let key = newKey, !key.isEmpty { try KeychainStore.write(key.trimmingCharacters(in: .whitespacesAndNewlines), reference: value.apiKeyReference) }
+        else {
+            let key = (newKey ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let effectiveKey = key.isEmpty ? (try KeychainStore.read(value.apiKeyReference) ?? "") : key
+            guard !effectiveKey.isEmpty, !effectiveKey.contains("\r"), !effectiveKey.contains("\n") else { throw AppError.validation("请填写有效的 API Key；编辑时留空会保留已存密钥。") }
+            if !key.isEmpty { try KeychainStore.write(key, reference: value.apiKeyReference) }
+        }
         var next = providers
         if let i = next.firstIndex(where: { $0.id == value.id }) { next[i] = value } else { next.append(value) }
         cancelModelRefresh(value.id)
         providers = next; resolveProvider(); persist(immediate: true)
         if !deleteKey { refreshModels(value.id) }
+    }
+    func chooseDefaultModel(providerID: UUID, modelID: String) throws {
+        guard !isGenerating else { throw AppError.validation("请先停止生成，再选择默认模型。") }
+        guard let index = providers.firstIndex(where: { $0.id == providerID }),
+              let model = models(for: providerID).first(where: { $0.id == modelID }) else { throw AppError.validation("模型不存在，请刷新模型列表。") }
+        // Older conversations may inherit the provider default. Pin their former model before
+        // changing that default, so choosing during onboarding cannot switch other histories.
+        let previous = providers[index].modelID
+        if !previous.isEmpty {
+            for i in conversations.indices where conversations[i].providerID == providerID && conversations[i].options.modelID == nil {
+                conversations[i].options.modelID = previous
+            }
+        }
+        providers[index].modelID = model.id; providers[index].displayName = model.name
+        selectModel(providerID: providerID, modelID: modelID)
+        resolveProvider(); persist(immediate: true)
     }
     func deleteProvider(_ id: UUID) throws {
         guard providers.count > 1 else { throw AppError.validation("请至少保留一个服务商") }
@@ -417,7 +448,7 @@ final class AppStore: ObservableObject {
         guard let value = providers.first(where: { $0.id == id }), database != nil else { return }
         let next = providers.filter { $0.id != id }
         try KeychainStore.delete(value.apiKeyReference)
-        providers = next
+        providers = next; modelIssues[id] = nil
         for i in conversations.indices where conversations[i].providerID == id {
             conversations[i].providerID = next[0].id; conversations[i].options.modelID = nil
             conversations[i].options.context.calibration = nil

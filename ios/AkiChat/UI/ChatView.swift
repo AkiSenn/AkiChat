@@ -7,11 +7,12 @@ struct ChatView: View {
     @State private var editedText = ""
     @State private var showDrawer = false
     private enum ChatSheet: Identifiable {
-        case sessions, settings, models, photos, advanced, edit(Message)
+        case sessions, settings, providers, models, photos, advanced, edit(Message)
         var id: String {
             switch self {
             case .sessions: return "sessions"
             case .settings: return "settings"
+            case .providers: return "providers"
             case .models: return "models"
             case .photos: return "photos"
             case .advanced: return "advanced"
@@ -38,6 +39,11 @@ struct ChatView: View {
             switch destination {
             case .sessions: ConversationsView().environmentObject(store)
             case .settings: SettingsView().environmentObject(store)
+            case .providers:
+                NavigationView {
+                    ProvidersView(onConfigured: { sheet = nil }).environmentObject(store)
+                        .navigationBarItems(trailing: Button("完成") { sheet = nil })
+                }.navigationViewStyle(StackNavigationViewStyle())
             case .models: modelPicker
             case .advanced: AdvancedConversationView().environmentObject(store)
             case .photos:
@@ -102,10 +108,10 @@ struct ChatView: View {
             Text("让想法，\n慢慢展开。").font(.system(.largeTitle, design: .rounded)).bold()
             Text("写作、探索、理解。\n从一个问题开始，留下有价值的对话。")
                 .foregroundColor(.secondary).font(.system(size: 16)).lineSpacing(6)
-            Button { sheet = .settings } label: {
+            Button { sheet = .providers } label: {
                 Label("配置你的 API", systemImage: "slider.horizontal.3").padding(14)
                     .background(Theme.card).cornerRadius(14)
-            }
+            }.accessibilityIdentifier("configure-api")
             Text("密钥保存在设备 Keychain，聊天记录保存在本机。").font(.caption).foregroundColor(.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
