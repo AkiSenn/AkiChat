@@ -1,4 +1,4 @@
-# AkiChat V2
+# AkiChat
 
 原生 iOS 14+ 多模型 AI 客户端，主要面向 **iPhone XR / iOS 14.8 / A12**。Swift 5、SwiftUI/UIKit、URLSessionDataDelegate、Core Data SQLite、Keychain；无中转后端、无登录、无遥测、无第三方 Swift 运行时依赖。
 
@@ -24,13 +24,15 @@ Copyright (c) 2026 AkiSenn · [MIT](LICENSE) · [AUTHORS](AUTHORS.md) · [第三
 
 官方依据：[TrollStore](https://github.com/opa334/TrollStore)。本项目不需要越狱注入、root helper、Apple 付费证书或 Provisioning Profile。
 
-### V1 数据迁移
+### 版本与早期安装包的数据迁移
 
-V2 Bundle ID 固定为 **com.akisenn.akichat**，V1 使用 `app.akichat.ios`。它们是独立 App/数据容器。先在 V1 导出全部聊天 JSON，再在 V2 会话抽屉中导入，并重新填写 API Key。没有跨容器自动迁移，也不卸载旧 App。完成备份前不要删除旧版。
+当前版本为 **1.2.0（build 8）**，属于现有 AkiChat v1 的持续迭代。此前的 V2/2.x 名称是版本规划误解，不代表重建新一代应用，后续沿用 1.x.x 编号。
+
+当前 Bundle ID 保持 **com.akisenn.akichat**。仅当早期安装包使用 `app.akichat.ios` 时，两个标识才对应独立容器：先从早期包导出聊天 JSON，再在当前应用会话抽屉中导入，并重新填写 API Key。按实际 Bundle ID 判断迁移需求，而不是按 v1/v2 名称；没有跨容器自动迁移。相同 Bundle ID 的历史、配置、密钥引用及内部数据格式编号保持不变。完成备份前不要删除早期安装包。
 
 ## 聊天性能与模型切换维护
 
-显示版本保留 1.1，构建号7。顶部主标题显示服务商名称，副标题显示当前真实模型 ID；点击直接按服务商分组选择模型。先展示本地缓存，刷新由用户主动触发，新配置保存后仍可自动发现。DeepSeek 默认 ID 仍为 deepseek-flash，其他模型以 /models 返回和手动配置为准。
+显示版本为 1.2.0，构建号8。顶部主标题显示服务商名称，副标题显示当前真实模型 ID；点击直接按服务商分组选择模型。先展示本地缓存，刷新由用户主动触发，新配置保存后仍可自动发现。DeepSeek 默认 ID 仍为 deepseek-flash，其他模型以 /models 返回和手动配置为准。
 
 流式更新集中到当前消息；草稿独立更新并防抖保存；历史 Markdown 缓存、后台解析、原生文本测量缓存和后台图片缩略图减少高频工作。详见 [性能审查与验证边界](docs/PERFORMANCE_REVIEW.md)。没有声称已测得 iOS 16 真机 FPS 或优化百分比。
 
@@ -144,7 +146,7 @@ Windows 可编辑和 Python 自检，不能运行 Xcode。新增 Swift 文件后
 
 工作流支持 push、workflow_dispatch、Tag push 与已发布 Release，使用 GitHub macos-15、固定 Xcode 16.4 和匹配 iOS 18.5 模拟器。先真机 arm64 Release 无签名编译，再检查 App、嵌入 Mach-O/Framework 的 arm64/iPhoneOS/最低系统，打包两种 IPA，执行 Mock 测试与截图，最后上传。模拟器测试宿主另用本地 ad-hoc 签名与最小普通 Keychain entitlement，解决无签名测试宿主缺少访问组的 -34018；CI 身份前缀不是 Apple 团队或账号，也不用于真机 Release。只在全部通过后发布 tag Release。失败日志与 xcresult 在 AkiChat-build-diagnostics。
 
-打包检查主程序、执行权限、Bundle ID、Info.plist、MinimumOSVersion 精确 14.0、Assets.car、无 provisioning、unsigned 确无签名、ZIP CRC 和 Payload/AkiChat.app；不接受模拟器、空文件或假 IPA。标签示例：`git tag v2.0.2 && git push origin v2.0.2`。具体已执行状态见 [Actions](https://github.com/AkiSenn/AkiChat/actions)。
+打包检查主程序、执行权限、Bundle ID、Info.plist、MinimumOSVersion 精确 14.0、Assets.car、无 provisioning、unsigned 确无签名、ZIP CRC 和 Payload/AkiChat.app；不接受模拟器、空文件或假 IPA。发布标签沿用 `v1.2.0` 这样的 1.x.x 编号；推送版本标签即授权构建与测试通过后发布附带真实 IPA 的 Release。具体已执行状态见 [Actions](https://github.com/AkiSenn/AkiChat/actions)。
 
 ## 测试与排查
 
