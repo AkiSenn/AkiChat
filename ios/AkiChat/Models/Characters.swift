@@ -45,6 +45,10 @@ struct CharacterRecord: Codable, Equatable, Identifiable {
     var avatarJPEG: Data?
     var originalPNGAssetID: UUID?
     var importedAt = Date()
+    var storageBytes: Int {
+        let avatarBytes: Int = avatarJPEG?.count ?? 0
+        return rawJSON.count + avatarBytes
+    }
 }
 struct CharacterBinding: Codable, Equatable {
     var characterID: UUID

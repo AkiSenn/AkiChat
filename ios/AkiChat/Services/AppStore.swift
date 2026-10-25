@@ -179,34 +179,42 @@ final class AppStore: ObservableObject {
         if let modelID = selected?.modelID { c.options.modelID = modelID }
         conversations.insert(c, at: 0); selectedID = c.id; loadSelection(); renderRevision += 1; persist(immediate: true)
     }
+    private func hasCharacterCapacity(_ value: CharacterRecord) -> Bool {
+        var bytes: Int = value.storageBytes
+        for card in characters { bytes += card.storageBytes }
+        return characters.count < 128 && bytes <= 32 * 1024 * 1024
+    }
     func saveCharacter(_ imported: CharacterImport, completion: @escaping (Result<UUID, Error>) -> Void) {
         guard database != nil else { completion(.failure(AppError.storage("数据库不可用，未保存角色"))); return }
-        let size = imported.record.rawJSON.count + (imported.record.avatarJPEG?.count ?? 0)
-        guard characters.count < 128, characters.reduce(size, { $0 + $1.rawJSON.count + ($1.avatarJPEG?.count ?? 0) }) <= 32 * 1024 * 1024 else {
-            completion(.failure(CharacterImportError.limit("角色库最多 128 张、设定与缩略图合计 32 MiB"))); return
-        }
+        guard hasCharacterCapacity(imported.record) else { completion(.failure(CharacterImportError.limit("角色库最多128张、设定与缩略图合计32 MiB"))); return }
         disk.async { [weak self] in
-            let result = Result { () throws -> CharacterRecord in
+            let result: Result<CharacterRecord, Error> = Result {
                 try CharacterCardParser.validate(imported.record)
-                var value = imported.record
+                var value: CharacterRecord = imported.record
                 if let png = imported.originalPNG { try CharacterAssetStore.save(png, id: value.id); value.originalPNGAssetID = value.id }
                 return value
             }
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                do {
-                    let value = try result.get()
-                    guard self.characters.count < 128, !self.characters.contains(where: { $0.id == value.id }),
-                          self.characters.reduce(value.rawJSON.count + (value.avatarJPEG?.count ?? 0), { $0 + $1.rawJSON.count + ($1.avatarJPEG?.count ?? 0) }) <= 32 * 1024 * 1024 else { throw CharacterImportError.limit("角色数量、容量超限或已保存") }
-                    self.characters.append(value); self.persist(immediate: true); completion(.success(value.id))
-                } catch { completion(.failure(error)) }
-            }
+            DispatchQueue.main.async { self?.acceptCharacter(result, completion: completion) }
         }
+    }
+    private func acceptCharacter(_ result: Result<CharacterRecord, Error>, completion: (Result<UUID, Error>) -> Void) {
+        do {
+            let value: CharacterRecord = try result.get()
+            guard hasCharacterCapacity(value), !characters.contains(where: { $0.id == value.id }) else { throw CharacterImportError.limit("角色数量、容量超限或已保存") }
+            characters.append(value); persist(immediate: true); completion(.success(value.id))
+        } catch { completion(.failure(error)) }
+    }
+    private func hasRoleSnapshotCapacity(_ additions: [CharacterRecord]) -> Bool {
+        var bytes: Int = 0
+        for c in conversations { bytes += c.character?.snapshot.storageBytes ?? 0 }
+        for card in additions { bytes += card.storageBytes }
+        return bytes <= 64 * 1024 * 1024
     }
     func deleteCharacter(_ id: UUID) { characters.removeAll { $0.id == id }; persist(immediate: true) }
     func newCharacterConversation(_ card: CharacterRecord, greeting: Int, providerID: UUID, modelID: String) throws {
         guard !isGenerating else { throw AppError.validation("请先停止生成，再创建角色对话。") }
         try CharacterCardParser.validate(card)
+        guard hasRoleSnapshotCapacity([card]) else { throw CharacterImportError.limit("角色会话快照合计最多64 MiB，请先导出并清理不再需要的旧角色会话。") }
         guard providers.contains(where: { $0.id == providerID }), models(for: providerID).contains(where: { $0.id == modelID }) else { throw AppError.validation("请先选择一个已配置的真实模型。") }
         let greetings = [card.fields.firstMessage] + card.fields.alternateGreetings
         guard greetings.indices.contains(greeting) else { throw CharacterImportError.invalid }
@@ -540,6 +548,8 @@ final class AppStore: ObservableObject {
     }
     func importArchive(_ data: Data) throws {
         let incoming = try ExportService.decode(data)
+        let snapshots = incoming.compactMap { $0.character?.snapshot }
+        guard hasRoleSnapshotCapacity(snapshots) else { throw CharacterImportError.limit("角色会话快照合计最多64 MiB") }
         for c in incoming {
             for image in c.messages.flatMap(\.images) + c.draftImages { try ImageService.validateImported(image) }
         }
