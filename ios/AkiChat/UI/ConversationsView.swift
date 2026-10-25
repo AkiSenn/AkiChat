@@ -32,6 +32,7 @@ struct ConversationsView: View {
                         Image(systemName: "magnifyingglass").foregroundColor(.secondary)
                         TextField("搜索标题或消息", text: $query)
                     }.padding(14).background(Theme.card).cornerRadius(14)
+                    if let onCharacters = onCharacters { Button(action: onCharacters) { Label("角色库", systemImage: "person.crop.square").frame(minHeight: 44) }.accessibilityIdentifier("character-library") }
                     ForEach(filtered) { c in
                         Button { store.selectConversation(c.id); close() } label: {
                             Card {
@@ -54,7 +55,6 @@ struct ConversationsView: View {
                     }
                     if filtered.isEmpty { Text("没有匹配的会话").foregroundColor(.secondary).padding(40) }
                     Text("长按会话可重命名、导出或删除").font(.caption).foregroundColor(.secondary)
-                    if let onCharacters = onCharacters { Button(action: onCharacters) { Label("角色库", systemImage: "person.crop.square").frame(minHeight: 44) }.accessibilityIdentifier("character-library") }
                     if let onSettings = onSettings { Button(action: onSettings) { Label("应用设置", systemImage: "gearshape").frame(minHeight: 44) } }
                 }.padding(18)
             }.background(Theme.background).navigationTitle("对话空间")

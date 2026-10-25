@@ -149,41 +149,74 @@ struct CharacterDetail: View {
     @State private var greeting = 0
     @State private var deleting = false
     @State private var error = ""
+    private var availableModels: [ModelRecord] {
+        guard let id = providerID else { return [] }
+        return store.models(for: id)
+    }
+    private var greetings: [String] { [card.fields.firstMessage] + card.fields.alternateGreetings }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 CharacterInformation(card: card)
-                Card {
-                    Text("开始角色对话").font(.headline)
-                    Picker("服务商", selection: $providerID) { Text("请选择").tag(nil as UUID?); ForEach(store.providers) { Text($0.name).tag(Optional($0.id)) } }
-                    Picker("模型", selection: $modelID) { Text("请选择模型").tag(""); ForEach(store.models(for: providerID ?? UUID())) { Text($0.name).tag($0.id) } }
-                    if let id = providerID { NavigationLink("管理该服务商模型", destination: ModelsView(providerID: id).environmentObject(store)) }
-                    Picker("开场白", selection: $greeting) {
-                        Text("默认开场白").tag(0)
-                        ForEach(Array(card.fields.alternateGreetings.enumerated()), id: \.offset) { index, text in Text("开场白 \(index + 2) · " + String(text.prefix(30))).tag(index + 1) }
-                    }.accessibilityIdentifier("character-greeting-picker")
-                    Text(([card.fields.firstMessage] + card.fields.alternateGreetings)[greeting]).font(.footnote).foregroundColor(.secondary)
-                    Button("开始对话") {
-                        do { try store.newCharacterConversation(card, greeting: greeting, providerID: providerID ?? UUID(), modelID: modelID); onStarted() }
-                        catch { error = error.localizedDescription }
-                    }.frame(minHeight: 44).disabled(store.isGenerating || modelID.isEmpty).accessibilityIdentifier("start-character-chat")
-                    Text("开场白直接显示，不调用 API。角色与模型相互独立，不会修改全局提示词或其他会话。").font(.caption).foregroundColor(.secondary)
-                }
+                modelCard
                 if !error.isEmpty { Text(error).foregroundColor(.red) }
                 Button("删除角色") { deleting = true }.foregroundColor(.red).frame(minHeight: 44)
             }.padding(18)
         }.background(Theme.background).navigationTitle("角色详情").navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                if providerID == nil { providerID = store.provider?.id ?? store.providers.first?.id }
-                let models = store.models(for: providerID ?? UUID())
-                if !models.contains(where: { $0.id == modelID }) { modelID = models.first(where: { $0.id == store.provider?.modelID })?.id ?? models.first?.id ?? "" }
+            .onAppear(perform: initializeSelection)
+            .onChange(of: providerID, perform: selectDefaultModel)
+            .alert(isPresented: $deleting) { deletionAlert }
+    }
+    private var providerPicker: some View {
+        Picker("服务商", selection: $providerID) {
+            Text("请选择").tag(nil as UUID?)
+            ForEach(store.providers) { p in Text(p.name).tag(Optional(p.id)) }
+        }
+    }
+    private var modelPicker: some View {
+        Picker("模型", selection: $modelID) {
+            Text("请选择模型").tag("")
+            ForEach(availableModels) { model in Text(model.name).tag(model.id) }
+        }
+    }
+    private var greetingPicker: some View {
+        Picker("开场白", selection: $greeting) {
+            Text("默认开场白").tag(0)
+            ForEach(card.fields.alternateGreetings.indices, id: \.self) { index in
+                Text("开场白 " + String(index + 2) + " · " + String(card.fields.alternateGreetings[index].prefix(30))).tag(index + 1)
             }
-            .onChange(of: providerID) { id in
-                let preferred = id == store.provider?.id ? store.provider?.modelID : store.providers.first(where: { $0.id == id })?.modelID
-                let models = store.models(for: id ?? UUID())
-                modelID = models.first(where: { $0.id == preferred })?.id ?? models.first?.id ?? ""
-            }
-            .alert(isPresented: $deleting) { Alert(title: Text("删除角色？"), message: Text("只从角色库移除；已有会话、设定和原始 PNG 会保留。"), primaryButton: .destructive(Text("删除")) { store.deleteCharacter(card.id); presentation.wrappedValue.dismiss() }, secondaryButton: .cancel(Text("取消"))) }
+        }.accessibilityIdentifier("character-greeting-picker")
+    }
+    private var modelCard: some View {
+        Card {
+            Text("开始角色对话").font(.headline)
+            providerPicker
+            modelPicker
+            if let id = providerID { NavigationLink("管理该服务商模型", destination: ModelsView(providerID: id).environmentObject(store)) }
+            greetingPicker
+            Text(greetings.indices.contains(greeting) ? greetings[greeting] : "").font(.footnote).foregroundColor(.secondary)
+            Button("开始对话", action: start).frame(minHeight: 44).disabled(store.isGenerating || modelID.isEmpty).accessibilityIdentifier("start-character-chat")
+            Text("开场白直接显示，不调用 API。角色与模型相互独立，不会修改全局提示词或其他会话。").font(.caption).foregroundColor(.secondary)
+        }
+    }
+    private var deletionAlert: Alert {
+        Alert(title: Text("删除角色？"), message: Text("只从角色库移除；已有会话、设定和原始 PNG 会保留。"),
+              primaryButton: .destructive(Text("删除")) { store.deleteCharacter(card.id); presentation.wrappedValue.dismiss() }, secondaryButton: .cancel(Text("取消")))
+    }
+    private func start() {
+        guard let id = providerID else { error = "请选择服务商和模型"; return }
+        do { try store.newCharacterConversation(card, greeting: greeting, providerID: id, modelID: modelID); onStarted() }
+        catch { self.error = error.localizedDescription }
+    }
+    private func initializeSelection() {
+        if providerID == nil { providerID = store.provider?.id ?? store.providers.first?.id }
+        if !availableModels.contains(where: { $0.id == modelID }) { selectDefaultModel(providerID) }
+    }
+    private func selectDefaultModel(_ id: UUID?) {
+        let preferred: String?
+        if id == store.provider?.id { preferred = store.provider?.modelID }
+        else { preferred = store.providers.first(where: { Optional($0.id) == id })?.modelID }
+        modelID = availableModels.first(where: { Optional($0.id) == preferred })?.id ?? availableModels.first?.id ?? ""
     }
 }
 
