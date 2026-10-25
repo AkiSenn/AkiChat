@@ -26,6 +26,17 @@ def main():
         assert not re.search(r"UserDefaults.*(?:key|Key)", text), path
         assert not re.search(r"(?:print|NSLog|debugPrint)\s*\(", text), f"Unexpected runtime logging: {path}"
         assert "serverTrust" not in text, f"TLS override: {path}"
+    composer = (ROOT / "AkiChat/UI/ChatComposer.swift").read_text(encoding="utf-8")
+    for callback in ["action: onThinking", "action: onSearch"]:
+        assert callback in composer, callback
+    for old in ["store.setThinking(", "store.updateConversationOption(", "guard store.settings.options.externalConsent", "onAdvanced() }\n                        else"]:
+        assert old not in composer, f"Old composer behavior returned: {old}"
+    for filename in ["AdvancedConversationView.swift", "SettingsView.swift"]:
+        text = (ROOT / "AkiChat/UI" / filename).read_text(encoding="utf-8")
+        assert "ReasoningControls()" not in text, filename
+    console = (ROOT / "AkiChat/UI/AdvancedConversationView.swift").read_text(encoding="utf-8")
+    for duplicate in ["searchMode", "searchProviderID", "searchConsent", "ģ��˼������", "ReasoningControls"]:
+        assert duplicate not in console, duplicate
     assert not list(ROOT.rglob("Package.resolved")), "Review deployment targets and licenses before adding packages"
     print("iOS 14 source/project checks passed (compiler availability checking still required)")
 

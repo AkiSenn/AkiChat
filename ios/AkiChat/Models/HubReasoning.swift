@@ -26,6 +26,10 @@ enum HubReasoning {
         let hub = provider.options.workBuddy
         let choices = levels(provider)
         if let fixed = fixed(provider) { return fixed }
+        if conversation.options.hubReasoningEffort == "default" {
+            if let value = clean(hub?.defaultEffort), choices.isEmpty || choices.contains(value) { return value }
+            return nil
+        }
         let requested = clean(conversation.options.hubReasoningEffort ?? conversation.effort.rawValue)
         if let requested = requested, choices.contains(requested) { return requested }
         // supportedEfforts wins over a simultaneous fixed-effort metadata field, as in the Hub.

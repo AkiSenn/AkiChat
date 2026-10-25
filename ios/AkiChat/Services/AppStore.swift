@@ -14,15 +14,16 @@ final class AppStore: ObservableObject {
     @Published private(set) var refreshingModels: Set<UUID> = []
     @Published private(set) var modelIssues: [UUID: ModelDiscoveryIssue] = [:]
     var modelErrors: [UUID: String] { modelIssues.mapValues(\.message) }
+    @Published private(set) var searchCredentialAvailable = false
     @Published private(set) var generationStatus = ""
     @Published var notice: String?
     let chat = ChatPresentation()
     let composer = ComposerState()
     @Published private(set) var provider: Provider?
-    var providerName: String { providers.first { $0.id == current?.providerID }?.name ?? "选择服务商" }
+    var providerName: String { providers.first { $0.id == current?.providerID }?.name ?? "ѡ�������" }
     var selectedModelLabel: String {
         let id = current?.options.modelID ?? providers.first { $0.id == current?.providerID }?.modelID ?? ""
-        return id.isEmpty ? "选择模型" : id
+        return id.isEmpty ? "ѡ��ģ��" : id
     }
     private enum RecordKey: String, CaseIterable {
         case conversations = "conversations.v1", providers = "providers.v1", settings = "settings.v1", catalogs = "catalogs.v2"
@@ -38,6 +39,7 @@ final class AppStore: ObservableObject {
     private var catalogVersions: [UUID: Int] = [:]
     private let catalogWorker: CatalogWorker
     private let modelConfiguration: () -> URLSessionConfiguration
+    private let searchFactory: (String) -> SearchProviderService
     private let senderFactory: () -> ChatRequestSending
     private var generationID: UUID?
     private var saveWork: DispatchWorkItem?
@@ -55,8 +57,8 @@ final class AppStore: ObservableObject {
     var draftImages: [Attachment] { composer.images }
     var thinking: Bool { current?.thinking ?? true }
     var effort: ReasoningEffort { current?.effort ?? .high }
-    init(database suppliedDatabase: RecordDatabase? = nil, modelConfiguration: @escaping () -> URLSessionConfiguration = { .ephemeral }, senderFactory: @escaping () -> ChatRequestSending = { ChatTransport() }, catalogWorker: CatalogWorker = CatalogWorker()) {
-        self.modelConfiguration = modelConfiguration; self.senderFactory = senderFactory; self.catalogWorker = catalogWorker
+    init(database suppliedDatabase: RecordDatabase? = nil, modelConfiguration: @escaping () -> URLSessionConfiguration = { .ephemeral }, senderFactory: @escaping () -> ChatRequestSending = { ChatTransport() }, searchFactory: @escaping (String) -> SearchProviderService = { DeepSeekSearchService(key: $0) }, catalogWorker: CatalogWorker = CatalogWorker()) {
+        self.modelConfiguration = modelConfiguration; self.senderFactory = senderFactory; self.searchFactory = searchFactory; self.catalogWorker = catalogWorker
         do {
             let db: RecordDatabase
             if let supplied = suppliedDatabase { db = supplied }
@@ -83,10 +85,10 @@ final class AppStore: ObservableObject {
             selectedID = conversations.sorted { $0.updatedAt > $1.updatedAt }.first?.id
             if conversations.isEmpty { newConversation() }
         } catch {
-            notice = "本地数据读取失败，已暂停持久化以保护原记录。请导出当前内容后重新启动。\n\(error.localizedDescription)"
+            notice = "�������ݶ�ȡʧ�ܣ�����ͣ�־û��Ա���ԭ��¼���뵼����ǰ���ݺ�����������\n\(error.localizedDescription)"
             providers = [.deepSeek]; conversations = [Conversation(providerID: providers[0].id)]; selectedID = conversations[0].id
         }
-        composer.load(current); chat.select(selectedID, messages: messages); resolveProvider()
+        composer.load(current); chat.select(selectedID, messages: messages); resolveProvider(); refreshSearchCredential()
         lifecycle = NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification).sink { [weak self] _ in
             guard let self = self else { return }
             self.backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Save conversation") { [weak self] in self?.endBackgroundTask() }
@@ -114,15 +116,51 @@ final class AppStore: ObservableObject {
     }
     func exportConversations() -> [Conversation] { commitDraft(); return conversations }
     private func loadSelection() {
-        composer.load(current); chat.select(selectedID, messages: messages); resolveProvider()
+        composer.load(current); chat.select(selectedID, messages: messages); resolveProvider(); refreshSearchCredential()
     }
-    func setThinking(_ value: Bool) { mutate(messagesChanged: false) { $0.thinking = value }; persist() }
-    func setEffort(_ value: ReasoningEffort) { mutate(messagesChanged: false) { $0.effort = value }; persist() }
+    func setThinking(_ value: Bool) {
+        guard !isGenerating, let p = provider, p.supportsThinking, value || ThinkingPolicy.canDisable(p) else { return }
+        mutate(messagesChanged: false) { $0.thinking = value }; persist()
+    }
+    func setEffort(_ value: ReasoningEffort) { guard !isGenerating else { return }; mutate(messagesChanged: false) { $0.effort = value }; persist() }
+    func setReasoningLevel(_ value: String) {
+        guard !isGenerating, let p = provider, p.supportsThinking, value == "default" || ThinkingPolicy.levels(p).contains(value) else { return }
+        mutate(messagesChanged: false) { $0.options.hubReasoningEffort = value }; persist()
+    }
+    func setSearchMode(_ value: SearchMode) {
+        guard !isGenerating else { return }
+        guard value != .automatic || provider?.options.supportsTools == true else { return }
+        mutate(messagesChanged: false) {
+            $0.options.searchMode = value
+            if value != .off { $0.options.prefixEnabled = false }
+        }; persist()
+    }
+    var searchConsent: Bool { settings.options.searchConsent ?? settings.options.externalConsent }
+    var searchProviders: [Provider] { providers.filter { $0.kind == .deepSeek && URL(string: $0.baseURL)?.scheme == "https" && URL(string: $0.baseURL)?.host == "api.deepseek.com" } }
+    var searchProvider: Provider? {
+        if let id = settings.options.searchProviderID { return searchProviders.first { $0.id == id } }
+        return searchProviders.first
+    }
+    private func refreshSearchCredential() {
+        let ready = searchProvider.map { !((try? KeychainStore.read($0.apiKeyReference)) ?? "").isEmpty } ?? false
+        if searchCredentialAvailable != ready { searchCredentialAvailable = ready }
+    }
+    func selectSearchProvider(_ id: UUID?) {
+        guard !isGenerating else { return }
+        updateGlobalOption(\.searchProviderID, id); refreshSearchCredential()
+    }
+    func saveSearchCredential(name: String, key: String) throws {
+        guard !isGenerating else { throw AppError.validation("����ֹͣ���ɣ����޸�������Դ��") }
+        var p = Provider.deepSeek; p.id = UUID(); p.apiKeyReference = UUID().uuidString
+        p.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "DeepSeek ����" : name
+        try saveProvider(p, newKey: key)
+        selectSearchProvider(p.id)
+    }
     func updateConversationOption<T>(_ path: WritableKeyPath<ConversationOptions, T>, _ value: T) { mutate(messagesChanged: false) { $0.options[keyPath: path] = value }; persist() }
     func updateGlobalOption<T>(_ path: WritableKeyPath<GlobalOptions, T>, _ value: T) { settings.options[keyPath: path] = value; persist() }
     var contextPlan: ContextPlan? {
         guard let p = provider, let c = current else { return nil }
-        return try? ContextManager.plan(provider: p, conversation: c, settings: settings, tools: c.options.toolsEnabled && p.options.supportsTools)
+        return try? ContextManager.plan(provider: p, conversation: c, settings: settings, tools: (c.options.toolsEnabled || c.options.searchMode != .off) && p.options.supportsTools)
     }
     var effectivePrompt: String {
         guard let p = provider, let c = current else { return "" }
@@ -144,10 +182,9 @@ final class AppStore: ObservableObject {
         let resolved = model.apply(to: base)
         mutate(messagesChanged: false) {
             $0.providerID = providerID; $0.options.modelID = modelID; $0.options.context.calibration = nil
-            if !resolved.supportsThinking { $0.thinking = false }
-            if !resolved.options.supportsTools { $0.options.toolsEnabled = false; $0.options.searchMode = .off }
+            if !resolved.options.supportsTools { $0.options.toolsEnabled = false }
         }
-        if !resolved.supportsVision && !draftImages.isEmpty { notice = "附件已保留，当前模型不支持图片；请移除附件或切换支持图片的模型。" }
+        if !resolved.supportsVision && !draftImages.isEmpty { notice = "�����ѱ�������ǰģ�Ͳ�֧��ͼƬ�����Ƴ��������л�֧��ͼƬ��ģ�͡�" }
         persist()
     }
     func models(for providerID: UUID) -> [ModelRecord] {
@@ -194,7 +231,7 @@ final class AppStore: ObservableObject {
             guard let self = self, self.modelRequests[id] === client else { return }
             if self.catalogVersions[id, default: 0] != version {
                 guard attempt < 3 else {
-                    self.finishModelRefresh(id, client: client, error: AppError.validation("本地模型配置持续变化，已保留当前配置；请稍后重试刷新。")); return
+                    self.finishModelRefresh(id, client: client, error: AppError.validation("����ģ�����ó����仯���ѱ�����ǰ���ã����Ժ�����ˢ�¡�")); return
                 }
                 self.mergeFetchedModels(fetched, id: id, client: client, attempt: attempt + 1)
                 return
@@ -217,7 +254,7 @@ final class AppStore: ObservableObject {
                         guard let self = self, self.modelRequests[id] === client else { return }
                         do {
                             let fetched = try parsed.get()
-                            guard !fetched.isEmpty else { throw AppError.validation("模型列表为空，已保留本地配置。") }
+                            guard !fetched.isEmpty else { throw AppError.validation("ģ���б�Ϊ�գ��ѱ����������á�") }
                             self.mergeFetchedModels(fetched, id: id, client: client)
                         } catch { self.finishModelRefresh(id, client: client, error: error) }
                     }
@@ -245,7 +282,7 @@ final class AppStore: ObservableObject {
     }
     func clearAll() { stop(); conversations = []; newConversation(); persist(immediate: true) }
     func addImage(_ image: Attachment) {
-        guard draftImages.count < 4 else { notice = "每条消息最多添加 4 张图片"; return }
+        guard draftImages.count < 4 else { notice = "ÿ����Ϣ������� 4 ��ͼƬ"; return }
         composer.images.append(image); dirtyRecords.insert(.conversations); persist()
     }
     func removeImage(_ id: UUID) { composer.images.removeAll { $0.id == id }; dirtyRecords.insert(.conversations); persist() }
@@ -255,13 +292,13 @@ final class AppStore: ObservableObject {
         guard !text.isEmpty || !draftImages.isEmpty else { return }
         // Validate configuration before clearing the persisted draft.
         do {
-            guard let p = provider, !p.modelID.isEmpty else { throw AppError.validation("请先选择模型") }
+            guard let p = provider, !p.modelID.isEmpty else { throw AppError.validation("����ѡ��ģ��") }
             _ = try JSONHTTPClient.request(url: Endpoint.chatURL(p.baseURL, path: p.options.chatPath, allowLANHTTP: p.kind == .workBuddy && (p.options.workBuddy?.allowLANHTTP ?? false)), key: KeychainStore.read(p.apiKeyReference) ?? "")
-            if !draftImages.isEmpty && !p.supportsVision { throw AppError.validation("当前模型不支持图片，请切换模型或移除附件。") }
+            if !draftImages.isEmpty && !p.supportsVision { throw AppError.validation("��ǰģ�Ͳ�֧��ͼƬ�����л�ģ�ͻ��Ƴ�������") }
         } catch { notice = error.localizedDescription; return }
         let user = Message(role: .user, content: text, images: draftImages)
         mutate {
-            if $0.messages.isEmpty { $0.title = String((text.isEmpty ? "图片对话" : text).prefix(30)) }
+            if $0.messages.isEmpty { $0.title = String((text.isEmpty ? "ͼƬ�Ի�" : text).prefix(30)) }
             $0.messages.append(user); $0.draft = ""; $0.draftImages = []; $0.updatedAt = Date()
         }
         composer.load(current); chat.requestLatest(); beginGeneration()
@@ -292,7 +329,7 @@ final class AppStore: ObservableObject {
         guard let p = provider, let c = current else { return }
         let token = UUID(); generationID = token; isGenerating = true; lastCheckpoint = Date()
         persist(immediate: true)
-        if ContextManager.shouldCompress(provider: p, conversation: c, settings: settings, tools: c.options.toolsEnabled && p.options.supportsTools) {
+        if ContextManager.shouldCompress(provider: p, conversation: c, settings: settings, tools: (c.options.toolsEnabled || c.options.searchMode != .off) && p.options.supportsTools) {
             summarize(token: token, continueChat: true)
         } else { startRun(token: token) }
     }
@@ -300,18 +337,18 @@ final class AppStore: ObservableObject {
         guard generationID == token, let p = provider, let c = current else { return }
         do {
             let key = try KeychainStore.read(p.apiKeyReference) ?? ""
-            let needsSearch = c.options.toolsEnabled && c.options.searchMode != .off
+            let needsSearch = c.options.searchMode != .off
             var search: SearchProviderService?
             if needsSearch {
-                guard p.options.supportsTools else { throw AppError.validation("当前模型不支持工具调用") }
-                guard settings.options.externalConsent else { throw AppError.validation("请先在会话高级设置中同意外部搜索与额外摘要请求。") }
-                let selected = providers.first { $0.id == settings.options.searchProviderID } ?? providers.first { $0.kind == .deepSeek && URL(string: $0.baseURL)?.host == "api.deepseek.com" }
-                guard let source = selected, source.kind == .deepSeek, URL(string: source.baseURL)?.host == "api.deepseek.com",
-                      let searchKey = try KeychainStore.read(source.apiKeyReference), !searchKey.isEmpty else { throw AppError.validation("请配置官方 DeepSeek 服务商密钥，用于 Search / Fetch。") }
-                search = DeepSeekSearchService(key: searchKey)
+                guard c.options.searchMode != .automatic || p.options.supportsTools else { throw AppError.validation("��ǰģ�Ͳ�֧���Զ������������������ѡ��ÿ����Ϣ����������ر�������") }
+                guard searchConsent else { throw AppError.validation("�����������ͬ���ⲿ������δ������������") }
+                guard c.options.searchTool else { throw AppError.validation("����������忪��������ѯ��") }
+                guard let source = searchProvider,
+                      let searchKey = try KeychainStore.read(source.apiKeyReference), !searchKey.isEmpty else { throw AppError.validation("��������������� DeepSeek ������Կ������ģ�Ϳ�ʹ�����������̡�") }
+                search = searchFactory(searchKey)
             }
             let executor = BuiltInToolExecutor(options: c.options, search: search, count: settings.options.searchCount)
-            let run = ChatRun(provider: p, key: key, conversation: c, settings: settings, executor: executor, canSearch: search != nil, senderFactory: senderFactory, update: { [weak self] messages, status in
+            let run = ChatRun(provider: p, key: key, conversation: c, settings: settings, executor: executor, canSearch: search != nil, searchService: search, searchCount: settings.options.searchCount, senderFactory: senderFactory, update: { [weak self] messages, status in
                 guard let self = self, self.generationID == token else { return }
                 self.chat.receive(messages)
                 if self.generationStatus != status { self.generationStatus = status }
@@ -343,14 +380,14 @@ final class AppStore: ObservableObject {
     private func summarize(token: UUID, continueChat: Bool) {
         guard generationID == token, let c = current else { return }
         do {
-            guard settings.options.externalConsent else { throw AppError.validation("摘要会额外发送历史内容到所选模型并产生费用，请先在高级设置中启用同意开关。") }
+            guard settings.options.externalConsent else { throw AppError.validation("ժҪ����ⷢ����ʷ���ݵ���ѡģ�Ͳ��������ã������ڸ߼�����������ͬ�⿪�ء�") }
             let p: Provider
             if let selected = c.options.context.summaryProviderID, let explicit = providers.first(where: { $0.id == selected }) {
                 p = models(for: selected).first(where: { $0.id == (c.options.context.summaryModelID ?? explicit.modelID) })?.apply(to: explicit) ?? explicit
             }
             else if let selected = provider { p = selected }
-            else { throw AppError.validation("请选择摘要模型") }
-            generationStatus = "正在压缩上下文（原始历史保留）"
+            else { throw AppError.validation("��ѡ��ժҪģ��") }
+            generationStatus = "����ѹ�������ģ�ԭʼ��ʷ������"
             compression = try SummaryService.generate(provider: p, key: KeychainStore.read(p.apiKeyReference) ?? "", conversation: c) { [weak self] result in
                 guard let self = self, self.generationID == token else { return }
                 self.compression = nil
@@ -361,8 +398,8 @@ final class AppStore: ObservableObject {
                         c.summaries?.append(version); c.activeSummaryID = version.id
                         if !continueChat { c.options.context.strategy = .summary }
                     }
-                    self.generationStatus = "摘要已保存"; self.persist(immediate: true)
-                case .failure(let error): self.notice = "压缩失败，旧摘要和原始历史已保留。\n" + error.localizedDescription
+                    self.generationStatus = "ժҪ�ѱ���"; self.persist(immediate: true)
+                case .failure(let error): self.notice = "ѹ��ʧ�ܣ���ժҪ��ԭʼ��ʷ�ѱ�����\n" + error.localizedDescription
                 }
                 if continueChat { self.startRun(token: token) }
                 else { self.isGenerating = false; self.generationID = nil }
@@ -385,16 +422,16 @@ final class AppStore: ObservableObject {
     }
     func deletePreset(_ id: UUID) { settings.options.presets.removeAll { $0.id == id }; persist(immediate: true) }
     func importPresets(_ data: Data) throws {
-        guard data.count <= 1024 * 1024 else { throw AppError.validation("预设文件不得超过 1 MiB") }
+        guard data.count <= 1024 * 1024 else { throw AppError.validation("Ԥ���ļ����ó��� 1 MiB") }
         let values = try JSONDecoder().decode([PromptPreset].self, from: data)
-        guard values.count <= 100, values.allSatisfy({ !$0.name.isEmpty && $0.text.count <= 32000 }) else { throw AppError.validation("预设数量或长度超限") }
+        guard values.count <= 100, values.allSatisfy({ !$0.name.isEmpty && $0.text.count <= 32000 }) else { throw AppError.validation("Ԥ�������򳤶ȳ���") }
         for var value in values { value.id = UUID(); settings.options.presets.append(value) }
         persist(immediate: true)
     }
     func stop() {
         guard isGenerating else { return }
         run?.cancel(); compression?.cancel(); run = nil; compression = nil
-        generationID = nil; isGenerating = false; generationStatus = "已停止"
+        generationID = nil; isGenerating = false; generationStatus = "��ֹͣ"
         mutate { c in for i in c.messages.indices where c.messages[i].state == .generating { c.messages[i].state = .stopped } }
         persist(immediate: true)
     }
@@ -409,26 +446,26 @@ final class AppStore: ObservableObject {
         let allowLAN = value.kind == .workBuddy && (value.options.workBuddy?.allowLANHTTP ?? false)
         _ = try Endpoint.chatURL(value.baseURL, path: value.options.chatPath, allowLANHTTP: allowLAN)
         _ = try Endpoint.url(value.baseURL, path: value.options.modelsPath, allowLANHTTP: allowLAN)
-        guard !value.name.isEmpty else { throw AppError.validation("请填写服务商名称") }
-        guard value.customHeaders.allSatisfy({ RequestBuilder.safeHeader($0.key) && !$0.value.contains("\r") && !$0.value.contains("\n") }) else { throw AppError.validation("自定义 Header 只能包含非敏感字段，且不能换行") }
-        guard database != nil else { throw AppError.storage("数据库不可用，无法保存配置") }
+        guard !value.name.isEmpty else { throw AppError.validation("����д����������") }
+        guard value.customHeaders.allSatisfy({ RequestBuilder.safeHeader($0.key) && !$0.value.contains("\r") && !$0.value.contains("\n") }) else { throw AppError.validation("�Զ��� Header ֻ�ܰ����������ֶΣ��Ҳ��ܻ���") }
+        guard database != nil else { throw AppError.storage("���ݿⲻ���ã��޷���������") }
         if deleteKey { try KeychainStore.delete(value.apiKeyReference) }
         else {
             let key = (newKey ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let effectiveKey = key.isEmpty ? (try KeychainStore.read(value.apiKeyReference) ?? "") : key
-            guard !effectiveKey.isEmpty, !effectiveKey.contains("\r"), !effectiveKey.contains("\n") else { throw AppError.validation("请填写有效的 API Key；编辑时留空会保留已存密钥。") }
+            guard !effectiveKey.isEmpty, !effectiveKey.contains("\r"), !effectiveKey.contains("\n") else { throw AppError.validation("����д��Ч�� API Key���༭ʱ���ջᱣ���Ѵ���Կ��") }
             if !key.isEmpty { try KeychainStore.write(key, reference: value.apiKeyReference) }
         }
         var next = providers
         if let i = next.firstIndex(where: { $0.id == value.id }) { next[i] = value } else { next.append(value) }
         cancelModelRefresh(value.id)
-        providers = next; resolveProvider(); persist(immediate: true)
+        providers = next; resolveProvider(); refreshSearchCredential(); persist(immediate: true)
         if !deleteKey { refreshModels(value.id) }
     }
     func chooseDefaultModel(providerID: UUID, modelID: String) throws {
-        guard !isGenerating else { throw AppError.validation("请先停止生成，再选择默认模型。") }
+        guard !isGenerating else { throw AppError.validation("����ֹͣ���ɣ���ѡ��Ĭ��ģ�͡�") }
         guard let index = providers.firstIndex(where: { $0.id == providerID }),
-              let model = models(for: providerID).first(where: { $0.id == modelID }) else { throw AppError.validation("模型不存在，请刷新模型列表。") }
+              let model = models(for: providerID).first(where: { $0.id == modelID }) else { throw AppError.validation("ģ�Ͳ����ڣ���ˢ��ģ���б���") }
         // Older conversations may inherit the provider default. Pin their former model before
         // changing that default, so choosing during onboarding cannot switch other histories.
         let previous = providers[index].modelID
@@ -442,13 +479,13 @@ final class AppStore: ObservableObject {
         resolveProvider(); persist(immediate: true)
     }
     func deleteProvider(_ id: UUID) throws {
-        guard providers.count > 1 else { throw AppError.validation("请至少保留一个服务商") }
+        guard providers.count > 1 else { throw AppError.validation("�����ٱ���һ��������") }
         stop()
         cancelModelRefresh(id)
         guard let value = providers.first(where: { $0.id == id }), database != nil else { return }
         let next = providers.filter { $0.id != id }
         try KeychainStore.delete(value.apiKeyReference)
-        providers = next; modelIssues[id] = nil
+        providers = next; modelIssues[id] = nil; refreshSearchCredential()
         for i in conversations.indices where conversations[i].providerID == id {
             conversations[i].providerID = next[0].id; conversations[i].options.modelID = nil
             conversations[i].options.context.calibration = nil
@@ -469,7 +506,7 @@ final class AppStore: ObservableObject {
             conversations.append(c)
         }
         persist(immediate: true)
-        notice = "已导入 \(incoming.count) 个会话。密钥和服务商不会从聊天文件导入。"
+        notice = "�ѵ��� \(incoming.count) ���Ự����Կ�ͷ����̲���������ļ����롣"
     }
     private func persist(immediate: Bool = false) {
         saveWork?.cancel()
@@ -506,7 +543,7 @@ final class AppStore: ObservableObject {
                 let retry = remaining
                 DispatchQueue.main.async {
                     self?.dirtyRecords.formUnion(retry)
-                    self?.notice = "本地保存失败，请及时导出备份。"
+                    self?.notice = "���ر���ʧ�ܣ��뼰ʱ�������ݡ�"
                 }
             }
         }

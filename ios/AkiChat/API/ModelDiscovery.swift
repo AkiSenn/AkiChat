@@ -10,7 +10,7 @@ enum ModelDiscovery {
         let parsed: Any
         do { parsed = try JSONSerialization.jsonObject(with: data) } catch { throw AppError.malformed }
         guard let object = parsed as? [String: Any], let rows = object["data"] as? [[String: Any]] else { throw AppError.malformed }
-        guard rows.count <= 5000 else { throw AppError.validation("模型列表超过 5000 条") }
+        guard rows.count <= 5000 else { throw AppError.validation("ģ���б����� 5000 ��") }
         var ids = Set<String>()
         return rows.compactMap { row in
             guard let id = row["id"] as? String, !id.isEmpty, id.count <= 256, ids.insert(id).inserted else { return nil }
@@ -25,7 +25,7 @@ enum ModelDiscovery {
             model.discovered.vision = row["supports_vision"] as? Bool ?? (row["capabilities"] as? [String: Any])?["vision"] as? Bool ??
                 (row["input_modalities"] == nil ? nil : model.inputModalities.contains("image"))
             model.discovered.thinking = row["supports_reasoning"] as? Bool ?? (row["capabilities"] as? [String: Any])?["reasoning"] as? Bool ??
-                (model.effort.isEmpty && row["reasoning_fixed_effort"] == nil ? nil : true)
+                (model.effort.isEmpty && row["reasoning_fixed_effort"] == nil && row["reasoning_can_disable"] == nil && row["always_reasoning"] as? Bool != true ? nil : true)
             model.discovered.tools = row["supports_tool_calls"] as? Bool ?? (row["capabilities"] as? [String: Any])?["tool_calls"] as? Bool ?? row["supports_tools"] as? Bool ?? (row["capabilities"] as? [String: Any])?["tools"] as? Bool ??
                 chatCaps["function_calling"] as? Bool ?? chatCaps["tools"] as? Bool
             model.discovered.streaming = chatCaps["streaming"] as? Bool
@@ -38,7 +38,7 @@ enum ModelDiscovery {
                 model.discovered.tools = model.discovered.tools ?? true
                 model.discovered.prefix = model.discovered.prefix ?? true
             }
-            let metadataSource: [String: Any] = provider.kind == .workBuddy ? row : caps
+            let metadataSource: [String: Any] = row
             if let encoded = try? JSONSerialization.data(withJSONObject: metadataSource, options: [.sortedKeys]) { model.metadata = String(decoding: encoded, as: UTF8.self) }
             return model
         }

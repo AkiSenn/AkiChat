@@ -7,7 +7,7 @@ struct ChatView: View {
     @State private var editedText = ""
     @State private var showDrawer = false
     private enum ChatSheet: Identifiable {
-        case sessions, settings, providers, models, photos, advanced, edit(Message)
+        case sessions, settings, providers, models, photos, advanced, thinking, search, edit(Message)
         var id: String {
             switch self {
             case .sessions: return "sessions"
@@ -16,6 +16,8 @@ struct ChatView: View {
             case .models: return "models"
             case .photos: return "photos"
             case .advanced: return "advanced"
+            case .thinking: return "thinking"
+            case .search: return "search"
             case .edit(let message): return message.id.uuidString
             }
         }
@@ -26,7 +28,7 @@ struct ChatView: View {
             header
             Divider().opacity(0.3)
             messageList
-            ChatComposer(draft: store.composer, onPhotos: { sheet = .photos }, onAdvanced: { sheet = .advanced })
+            ChatComposer(draft: store.composer, onPhotos: { sheet = .photos }, onAdvanced: { sheet = .advanced }, onThinking: { openPanel(.thinking) }, onSearch: { openPanel(.search) })
         }
         if showDrawer {
             Color.black.opacity(0.3).edgesIgnoringSafeArea(.all).onTapGesture { withAnimation(.easeOut(duration: 0.2)) { showDrawer = false } }
@@ -42,10 +44,12 @@ struct ChatView: View {
             case .providers:
                 NavigationView {
                     ProvidersView(onConfigured: { sheet = nil }).environmentObject(store)
-                        .navigationBarItems(trailing: Button("完成") { sheet = nil })
+                        .navigationBarItems(trailing: Button("���") { sheet = nil })
                 }.navigationViewStyle(StackNavigationViewStyle())
             case .models: modelPicker
             case .advanced: AdvancedConversationView().environmentObject(store)
+            case .thinking: ThinkingPanel().environmentObject(store)
+            case .search: SearchPanel().environmentObject(store)
             case .photos:
                 PhotoPicker(completion: { result in
                     switch result {
@@ -57,24 +61,28 @@ struct ChatView: View {
             }
         }
         .alert(isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } })) {
-            Alert(title: Text("AkiChat"), message: Text(store.notice ?? ""), dismissButton: .default(Text("好")))
+            Alert(title: Text("AkiChat"), message: Text(store.notice ?? ""), dismissButton: .default(Text("��")))
         }
+    }
+    private func openPanel(_ destination: ChatSheet) {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        sheet = destination
     }
     private func editSheet(_ message: Message) -> some View {
         NavigationView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("发送后将替换该消息及其后续回答。图片会保留。").font(.footnote).foregroundColor(.secondary)
+                    Text("���ͺ��滻����Ϣ��������ش�ͼƬ�ᱣ����").font(.footnote).foregroundColor(.secondary)
                     TextEditor(text: $editedText).padding(8).background(Theme.card).cornerRadius(12)
-                    Button("编辑并重新发送") {
+                    Button("�༭�����·���") {
                         store.editAndResend(message.id, text: editedText); sheet = nil
                     }.disabled(editedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && message.images.isEmpty)
-                }.padding().navigationTitle("编辑消息")
-                .navigationBarItems(trailing: Button("取消") { sheet = nil })
+                }.padding().navigationTitle("�༭��Ϣ")
+                .navigationBarItems(trailing: Button("ȡ��") { sheet = nil })
             }.navigationViewStyle(StackNavigationViewStyle())
     }
     private var header: some View {
         HStack(spacing: 12) {
-            IconButton(symbol: "line.horizontal.3", label: "会话抽屉") {
+            IconButton(symbol: "line.horizontal.3", label: "�Ự����") {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 withAnimation(.easeOut(duration: 0.22)) { showDrawer = true }
             }
@@ -92,7 +100,7 @@ struct ChatView: View {
                 }.foregroundColor(.primary)
             }.accessibilityIdentifier("model-selector")
             Spacer(minLength: 0)
-            IconButton(symbol: "square.and.pencil", label: "新建对话") { store.newConversation() }
+            IconButton(symbol: "square.and.pencil", label: "�½��Ի�") { store.newConversation() }
         }.padding(.horizontal, 18).padding(.vertical, 12).background(Theme.background)
     }
     private var messageList: some View {
@@ -105,14 +113,14 @@ struct ChatView: View {
         VStack(alignment: .leading, spacing: 20) {
             Spacer().frame(height: 55)
             Image(systemName: "sparkles").font(.system(size: 36)).foregroundColor(Theme.accent)
-            Text("让想法，\n慢慢展开。").font(.system(.largeTitle, design: .rounded)).bold()
-            Text("写作、探索、理解。\n从一个问题开始，留下有价值的对话。")
+            Text("���뷨��\n����չ����").font(.system(.largeTitle, design: .rounded)).bold()
+            Text("д����̽�������⡣\n��һ�����⿪ʼ�������м�ֵ�ĶԻ���")
                 .foregroundColor(.secondary).font(.system(size: 16)).lineSpacing(6)
             Button { sheet = .providers } label: {
-                Label("配置你的 API", systemImage: "slider.horizontal.3").padding(14)
+                Label("������� API", systemImage: "slider.horizontal.3").padding(14)
                     .background(Theme.card).cornerRadius(14)
             }.accessibilityIdentifier("configure-api")
-            Text("密钥保存在设备 Keychain，聊天记录保存在本机。").font(.caption).foregroundColor(.secondary)
+            Text("��Կ�������豸 Keychain�������¼�����ڱ�����").font(.caption).foregroundColor(.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private var modelPicker: some View {

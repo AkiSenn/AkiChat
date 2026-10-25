@@ -28,6 +28,7 @@ struct ProviderOptions: Codable, Equatable {
     var modelSystemPrompt: String?
     var modelPresetIDs: [UUID]?
     var workBuddy: WorkBuddyOptions?
+    var reasoning: ReasoningMetadata?
 }
 extension Provider {
     var options: ProviderOptions {
@@ -48,8 +49,8 @@ extension Provider {
         value.options = options
         return value
     }
-    static let openAI = Provider(name: "OpenAI", baseURL: "https://api.openai.com/v1", modelID: "", displayName: "手动选择 OpenAI 模型")
-    static let workBuddy = Provider(name: "WorkBuddy2API Hub", baseURL: "https://", modelID: "", displayName: "请选择 WorkBuddy 模型", kind: .workBuddy, requestsStreamingUsage: true)
+    static let openAI = Provider(name: "OpenAI", baseURL: "https://api.openai.com/v1", modelID: "", displayName: "�ֶ�ѡ�� OpenAI ģ��")
+    static let workBuddy = Provider(name: "WorkBuddy2API Hub", baseURL: "https://", modelID: "", displayName: "��ѡ�� WorkBuddy ģ��", kind: .workBuddy, requestsStreamingUsage: true)
 }
 
 struct ModelCapabilities: Codable, Equatable {
@@ -92,8 +93,14 @@ struct ModelRecord: Codable, Identifiable, Equatable {
         options.outputLimit = outputLimitOverride ?? outputLimit ?? base.options.outputLimit
         options.modelSystemPrompt = systemPrompt
         options.modelPresetIDs = presetIDs
+        let raw = (try? JSONSerialization.jsonObject(with: Data(metadata.utf8))) as? [String: Any] ?? [:]
+        let effortInfo = raw["effort"] as? [String: Any] ?? [:]
+        options.reasoning = ReasoningMetadata(levels: effort,
+            defaultLevel: raw["reasoning_default_effort"] as? String ?? effortInfo["default_level"] as? String,
+            fixedLevel: raw["reasoning_fixed_effort"] as? String,
+            canDisable: raw["reasoning_can_disable"] as? Bool,
+            alwaysOn: raw["always_reasoning"] as? Bool)
         if result.kind == .workBuddy {
-            let raw = (try? JSONSerialization.jsonObject(with: Data(metadata.utf8))) as? [String: Any] ?? [:]
             var hub = options.workBuddy ?? WorkBuddyOptions()
             hub.reasoningEfforts = effort
             hub.defaultEffort = raw["reasoning_default_effort"] as? String
@@ -155,17 +162,18 @@ struct PromptPreset: Codable, Identifiable, Equatable {
     var text: String
     var enabled = true
     static let defaults: [PromptPreset] = [
-        PromptPreset(name: "通用助手", text: "提供准确、清楚、有帮助的回答。"),
-        PromptPreset(name: "中文技术助手", text: "用清晰中文解释技术问题，标注不确定性。"),
-        PromptPreset(name: "Swift 专家", text: "你擅长 Swift 和原生 iOS 开发；回答时关注 API 可用性和可维护性。"),
-        PromptPreset(name: "翻译助手", text: "忠实保留原意、术语与语气，并给出自然的译文。"),
-        PromptPreset(name: "编程助手", text: "优先给出可验证的实现，解释关键假设和测试方法。")]
+        PromptPreset(name: "ͨ������", text: "�ṩ׼ȷ��������а����Ļش�"),
+        PromptPreset(name: "���ļ�������", text: "���������Ľ��ͼ������⣬��ע��ȷ���ԡ�"),
+        PromptPreset(name: "Swift ר��", text: "���ó� Swift ��ԭ�� iOS �������ش�ʱ��ע API �����ԺͿ�ά���ԡ�"),
+        PromptPreset(name: "��������", text: "��ʵ����ԭ�⡢��������������������Ȼ�����ġ�"),
+        PromptPreset(name: "�������", text: "���ȸ�������֤��ʵ�֣����͹ؼ�����Ͳ��Է�����")]
 }
 struct GlobalOptions: Codable, Equatable {
     var presets: [PromptPreset] = PromptPreset.defaults
     var presetIDs: [UUID] = []
     var promptEnabled = true
     var externalConsent = false
+    var searchConsent: Bool? // nil reads the legacy shared consent without modifying it
     var searchProviderID: UUID?
     var searchCount = 5
     var imageDimension = 2048
