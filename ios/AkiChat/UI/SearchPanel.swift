@@ -17,7 +17,7 @@ struct SearchPanel: View {
                 }.padding(18)
             }.background(Theme.background.edgesIgnoringSafeArea(.all))
                 .navigationTitle("联网搜索").navigationBarTitleDisplayMode(.inline)
-                .navigationBarItems(leading: Button("关闭") { presentation.wrappedValue.dismiss() }, trailing: Button("完成") { presentation.wrappedValue.dismiss() })
+                .navigationBarItems(leading: Button("关闭") { presentation.wrappedValue.dismiss() }.accessibilityIdentifier("search-panel-close"), trailing: Button("完成") { presentation.wrappedValue.dismiss() })
         }.navigationViewStyle(StackNavigationViewStyle()).accessibilityIdentifier("search-panel")
     }
     private var modeCard: some View {

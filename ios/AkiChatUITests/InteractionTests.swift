@@ -107,7 +107,7 @@ final class InteractionTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["add-search-provider"].firstMatch.exists)
         XCTAssertTrue(app.switches["search-consent-toggle"].exists)
         XCTAssertFalse(app.navigationBars["会话控制台"].exists)
-        app.buttons["关闭"].tap(); XCTAssertTrue(button.isEnabled)
+        app.buttons["search-panel-close"].tap(); XCTAssertTrue(button.isEnabled)
         app.terminate()
         app = launch(0, searchCredential: true)
         app.buttons["search-button"].tap()

@@ -27,7 +27,7 @@ struct ThinkingPanel: View {
                 }.padding(18)
             }.background(Theme.background.edgesIgnoringSafeArea(.all))
                 .navigationTitle("深度思考").navigationBarTitleDisplayMode(.inline)
-                .navigationBarItems(leading: Button("关闭") { presentation.wrappedValue.dismiss() }, trailing: Button("完成") { presentation.wrappedValue.dismiss() })
+                .navigationBarItems(leading: Button("关闭") { presentation.wrappedValue.dismiss() }.accessibilityIdentifier("thinking-panel-close"), trailing: Button("完成") { presentation.wrappedValue.dismiss() })
         }.navigationViewStyle(StackNavigationViewStyle()).accessibilityIdentifier("thinking-panel")
             .onAppear {
                 if !store.isGenerating, let p = store.provider, p.options.reasoning?.levels.isEmpty != false {
