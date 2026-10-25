@@ -21,6 +21,18 @@
 - 自动测试：无模型保存后自动 GET、默认模型/真实请求/密钥、重启读取、失败保留及手动模式、分类错误、路径规范化、无效保存无副作用；UI 验证欢迎页直达与三项表单。实际 GitHub macOS 编译与 IPA 验证结果记录于 PR。
 - 真机待验收：XR/iOS 14.8、iOS 16，真实服务商目录与 Key，保存→选择→连续聊天，手动兼容模式、键盘与深色布局。
 
+### 阶段 A 验证记录
+
+代码提交 `f55eae329665bc003e041c677195d400bb69c844`，独立 [PR #3](https://github.com/AkiSenn/AkiChat/pull/3)，未合并、未创建 Release。
+
+- [macOS Actions 40206905413](https://github.com/AkiSenn/AkiChat/actions/runs/40206905413)：全部成功，97 项单元测试及 4 项界面测试，零失败。新增 5 项 ProviderOnboardingTests 及欢迎页/三项表单 UI 测试通过。
+- Xcode 16.4 完成 Release iphoneos arm64 无签名编译；下载 [AkiChat-iOS14 产物](https://github.com/AkiSenn/AkiChat/actions/runs/40206905413/artifacts/12604725949) 后独立复核 SHA256、ZIP/Payload、Info.plist、arm64 Mach-O、可执行权限、iPhoneOS 平台、最低系统 14.0、版本 1.2.0/build8、资源和无 provisioning profile。unsigned 无代码签名，adhoc 含临时代码签名；均不是开发者证书签名。
+- unsigned 为 3,613,202 字节，adhoc 为 3,646,708 字节。正式 Release 步骤明确跳过，原发行资产保持不变。
+- 自动获取结果来自 Mock：GET /v1/models 返回 model-a/model-b，明确选 model-b 后请求地址、JSON model 及 Keychain 认证一致，保存重启仍保持；404 保留缓存并可添加 manual，旧原文/摘要和其他会话的模型保留。
+- 实际模拟器 iOS 18.5，Runner 无可用 iOS 16。没有使用用户真实密钥，没有实测 iOS 14.8/16，也没有测量交互帧率。静态检查和新模拟器通过不能替代真机验收。
+
+安装验收：下载产物解压，把 `AkiChat-iOS14-unsigned.ipa` 交给 TrollStore；若该安装器无法处理纯无签名包，使用同产物内的 adhoc 包。按上方 A 验收项检查后，再推进 B–D。
+
 ## B：思考与联网独立面板（待实施）
 
 - iOS 14 自定义底部面板，点击关闭/取消；关闭灰色但可点击，开启强调色，不能关闭明确说明。
