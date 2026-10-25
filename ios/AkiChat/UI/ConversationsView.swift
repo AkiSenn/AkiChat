@@ -32,7 +32,18 @@ struct ConversationsView: View {
                         Image(systemName: "magnifyingglass").foregroundColor(.secondary)
                         TextField("搜索标题或消息", text: $query)
                     }.padding(14).background(Theme.card).cornerRadius(14)
-                    if let onCharacters = onCharacters { Button(action: onCharacters) { Label("角色库", systemImage: "person.crop.square").frame(minHeight: 44) }.accessibilityIdentifier("character-library") }
+                    if let onCharacters = onCharacters {
+                        Button(action: onCharacters) {
+                            HStack {
+                                Label("角色库", systemImage: "person.crop.square")
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption)
+                            }
+                            .padding(.horizontal, 14).frame(maxWidth: .infinity, minHeight: 48)
+                            .background(Theme.card).cornerRadius(14).contentShape(Rectangle())
+                        }.buttonStyle(PlainButtonStyle()).foregroundColor(Theme.accent)
+                            .accessibilityIdentifier("character-library")
+                    }
                     ForEach(filtered) { c in
                         Button { store.selectConversation(c.id); close() } label: {
                             Card {

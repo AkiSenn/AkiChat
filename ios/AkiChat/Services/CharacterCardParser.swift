@@ -90,7 +90,7 @@ enum CharacterCardParser {
         let parsed = try json(record.rawJSON)
         guard parsed.fields == record.fields, parsed.spec == record.spec else { throw CharacterImportError.invalid }
         if let avatar = record.avatarJPEG {
-            guard avatar.count <= 128 * 1024, let source = CGImageSourceCreateWithData(avatar as CFData, nil),
+            guard avatar.count <= 128 * 1024, avatar.starts(with: Data([255, 216, 255])), let source = CGImageSourceCreateWithData(avatar as CFData, nil),
                   let info = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
                   let w = info[kCGImagePropertyPixelWidth] as? Int, let h = info[kCGImagePropertyPixelHeight] as? Int,
                   w > 0, h > 0, w <= 256, h <= 256 else { throw CharacterImportError.corrupt }

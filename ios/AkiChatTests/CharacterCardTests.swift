@@ -94,6 +94,23 @@ final class CharacterCardTests: XCTestCase {
         XCTAssertEqual(CharacterPrompt.render("{{user}}", character: "X", user: "{{char}}"), "{{char}}")
         XCTAssertEqual(CharacterPrompt.render(String(repeating: "{{original}}", count: 1000), character: "x", user: "y", original: String(repeating: "z", count: 65536)), CharacterPrompt.limitMarker)
     }
+    func testOrdinaryPromptIsNotSubjectToCharacterExpansionGuard() throws {
+        var settings = AppSettings(); settings.systemPrompt = CharacterPrompt.limitMarker
+        let c = Conversation(providerID: Provider.deepSeek.id, messages: [Message(role: .user, content: "hello")])
+        let request = try RequestBuilder.make(provider: .deepSeek, key: "mock", conversation: c, settings: settings, stream: false)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any])
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertTrue((messages.first?["content"] as? String)?.contains(CharacterPrompt.limitMarker) == true)
+    }
+    func testArchiveRejectsNonJPEGAvatarAndMismatchedRoleIdentity() throws {
+        var card = try CharacterCardParser.json(Self.fixture())
+        card.avatarJPEG = Self.png()
+        XCTAssertThrowsError(try CharacterCardParser.validate(card))
+        card.avatarJPEG = nil
+        var c = Conversation(providerID: Provider.deepSeek.id)
+        c.character = CharacterBinding(characterID: UUID(), snapshot: card)
+        XCTAssertThrowsError(try ExportService.decode(ExportService.json([c])))
+    }
     func testWorldbookOnlySupportedEnabledMatchingEntriesWithinBudget() throws {
         let card = try CharacterCardParser.json(Self.fixture())
         XCTAssertEqual(CharacterPrompt.activated(card, messages: []).ids, [0])
