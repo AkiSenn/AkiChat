@@ -21,7 +21,6 @@ struct MarkdownBlock: Identifiable, Equatable {
     var id: Int
     var kind: Kind
     var text: String
-    var tableRows: [[String]] = []
 }
 enum MarkdownParser {
     static func blocks(_ source: String) -> [MarkdownBlock] {
@@ -29,8 +28,7 @@ enum MarkdownParser {
         var codeLanguage: String?
         func append(_ kind: MarkdownBlock.Kind, _ text: String) {
             guard !text.isEmpty else { return }
-            result.append(MarkdownBlock(id: result.count, kind: kind, text: text,
-                                        tableRows: kind == .table ? tableRows(text) : []))
+            result.append(MarkdownBlock(id: result.count, kind: kind, text: text))
         }
         func flush() {
             let text = lines.joined(separator: "\n")
@@ -58,14 +56,6 @@ enum MarkdownParser {
         }
         if let language = codeLanguage { append(.code(language), lines.joined(separator: "\n")) } else { flush() }
         return result
-    }
-    static func tableRows(_ text: String) -> [[String]] {
-        text.components(separatedBy: "\n").enumerated().filter { $0.offset != 1 }.map {
-            var cells = $0.element.components(separatedBy: "|")
-            if cells.first?.trimmingCharacters(in: .whitespaces).isEmpty == true { cells.removeFirst() }
-            if cells.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { cells.removeLast() }
-            return cells.map { $0.trimmingCharacters(in: .whitespaces) }
-        }
     }
 }
 
@@ -136,15 +126,22 @@ private struct MarkdownBlockView: View, Equatable {
                         RoundedRectangle(cornerRadius: 2).fill(Theme.accent.opacity(0.5)).frame(width: 3)
                         NativeRichText(text: block.text, size: size, color: .secondaryLabel, markdown: true)
                     }
-                case .table: MarkdownTable(rows: block.tableRows, size: size)
+                case .table: MarkdownTable(text: block.text, size: size)
                 case .paragraph: NativeRichText(text: block.text, size: size, markdown: true)
                 }
     }
 }
 struct MarkdownTable: View {
-    // Prepared once by MarkdownDocument's background parser, never per cell on main.
-    let rows: [[String]]
+    let text: String
     let size: Double
+    var rows: [[String]] {
+        text.components(separatedBy: "\n").enumerated().filter { $0.offset != 1 }.map {
+            var cells = $0.element.components(separatedBy: "|")
+            if cells.first?.trimmingCharacters(in: .whitespaces).isEmpty == true { cells.removeFirst() }
+            if cells.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { cells.removeLast() }
+            return cells.map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+    }
     var body: some View {
         ScrollView(.horizontal) {
             VStack(alignment: .leading, spacing: 0) {
