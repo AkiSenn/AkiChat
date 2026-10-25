@@ -53,8 +53,26 @@ AkiChat 仍为通用 AI 客户端，角色是会话设定，不是 Provider 或 
 - 单文字字段 64 KiB，备用开场最多64条，世界书最多256条、每条8 KiB、每组关键词最多8个。角色库最多128张，设定与缩略图合计32 MiB，角色会话快照合计64 MiB，头像不超过128 KiB/256px。所有读取、解析、解压、缩图及资源写入有界且在后台执行。
 - 卡片无设备/Keychain权限，不能修改工具白名单、联网授权、Provider 或全局提示词；不会自动访问卡片资源URL。角色设定会在开始聊天后发给用户选定的模型服务商，导入预览明确说明。
 
+## 修改文件
+
+- 数据模型：`ios/AkiChat/Models/Characters.swift`、`Models.swift`、`AdvancedModels.swift`。
+- 解析、资源与提示词：`ios/AkiChat/Services/CharacterCardParser.swift`、`CharacterImportService.swift`、`CharacterPrompt.swift`。
+- 既有聊天链路：`ios/AkiChat/Services/AppStore.swift`、`ContextManager.swift`、`ios/AkiChat/API/RequestBuilder.swift`。
+- 界面：`ios/AkiChat/UI/CharactersView.swift`、`ConversationsView.swift`、`ChatView.swift`、`ChatTimelineView.swift`、`MessageRow.swift`、`SettingsView.swift`。
+- 测试：`ios/AkiChatTests/CharacterCardTests.swift`、`ios/AkiChatUITests/InteractionTests.swift`、`ios/AkiChat/Services/DebugUIFixtures.swift`。
+- 工程与说明：`ios/scripts/generate_project.py`、`ios/AkiChat.xcodeproj/project.pbxproj`、`README.md`、本文件。继续使用已有 `.github/workflows/build-ios.yml`，没有更改发布规则。
+
 ## 验证与待验证
 
 单元测试覆盖 V2/V3 JSON、PNG V2/V3优先级、zTXt/iTXt、头像、CRC/恶意长度/压缩炸弹/嵌套上限、变量、世界书、真实请求提示词与普通/跨角色隔离、开场轮次、持久化/删除/导出及文件原样保存。UI 测试覆盖抽屉角色库、文件选择器打开/取消、详情开始对话、本地开场白、顶部真实模型切换。网络使用 Mock。
+
+2026-10-26（UTC+8）已验证代码提交 `a5950a978e3839f65ba5a177a12afba0e08a4913`：[Actions #59](https://github.com/AkiSenn/AkiChat/actions/runs/40222393564) 全部成功。真实 iPhoneOS Release arm64 编译、打包验证通过；118 项单元测试与 8 项原生 UI 测试零失败。模拟器实际为 iPhone 16 Pro / iOS 18.5，Runner 没有 iOS 16 runtime，未测出 FPS，也不据此宣称 iOS 14/16 真机流畅。
+
+[安装测试产物 AkiChat-iOS14](https://github.com/AkiSenn/AkiChat/actions/runs/40222393564/artifacts/12609923322) 包含纯 unsigned 与 ad-hoc 两个 IPA。下载后再次核对 SHA-256、ZIP Payload、arm64 Mach-O、iPhoneOS 平台、MinimumOSVersion=14.0、Bundle ID=com.akisenn.akichat、版本1.2.0/构建8、Assets.car 与签名状态；两个包均通过。包来自实际编译，无 Provisioning Profile；ad-hoc 包为本地临时签名，不是 Apple 开发者证书。TrollStore 安装流程仍以 README 为准。
+
+- unsigned SHA-256：`2a12d9cf8534295cc112dcccec29e8bb0f4bef629b69d8fd6cd4149e31139863`
+- ad-hoc SHA-256：`800e58e5e489ab72a7c4d9315fcd4627896052b74904f853d4bc77042cb69936`
+
+CI 曾发现 Swift 5 类型检查耗时上限及角色库按钮点击空隙，已拆分局部表达式并明确整行点击区域后重跑通过；没有跳过测试或提高最低系统要求。UI 测试使用本地角色 fixture，实际 Files/iCloud 选择用户文件并完成预览保存的端到端流程仍列为真机待验证；文件读取、解析、PNG 原样保存分别有离线测试。
 
 本地 Windows 的静态检查不是 Xcode 构建；实际编译、测试和 IPA 结果以 Actions 为准。仍需 iPhone XR/iOS14.8及iOS16验证：Files/iCloud提供者原始PNG/JSON导入、预览确认/取消、头像/长设定滚动、备用开场白、真实API连续角色聊天、切换模型与重启恢复、世界书及历史压缩、TrollStore安装。版本、Bundle ID 和最低 iOS14.0保持不变，不发布正式 Release。
