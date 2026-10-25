@@ -8,6 +8,8 @@ struct WorkBuddyOptions: Codable, Equatable {
     var reasoningEfforts: [String] = []
     var defaultEffort: String?
     var canDisableThinking: Bool?
+    var fixedEffort: String?
+    var alwaysReasoning: Bool?
 }
 
 struct ProviderOptions: Codable, Equatable {
@@ -88,6 +90,8 @@ struct ModelRecord: Codable, Identifiable, Equatable {
             hub.reasoningEfforts = effort
             hub.defaultEffort = raw["reasoning_default_effort"] as? String
             hub.canDisableThinking = raw["reasoning_can_disable"] as? Bool
+            hub.fixedEffort = raw["reasoning_fixed_effort"] as? String
+            hub.alwaysReasoning = raw["always_reasoning"] as? Bool
             options.workBuddy = hub
         }
         result.options = options
@@ -114,6 +118,7 @@ struct ContextOptions: Codable, Equatable {
 }
 struct ConversationOptions: Codable, Equatable {
     var modelID: String?
+    var hubReasoningEffort: String?
     var context = ContextOptions()
     var systemPrompt = ""
     var presetIDs: [UUID] = []

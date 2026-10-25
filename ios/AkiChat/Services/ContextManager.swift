@@ -75,7 +75,7 @@ enum ContextManager {
         let output = min(max(256, requestedOutput), max(256, provider.options.outputLimit), max(256, budget / 2))
         let prompt = PromptResolver.effective(provider: provider, conversation: conversation, settings: settings)
         let overhead = (provider.options.supportsSystem ? estimate(prompt) : 0) + (tools ? 900 : 0) + 64
-        let reasoning = tools && provider.kind == .deepSeek
+        let reasoning = tools && (provider.kind == .deepSeek || provider.kind == .workBuddy)
         var groups = turns(conversation.messages, tools: tools)
         let fullCount = groups.count
         let keep = max(1, options.recentTurns) + (groups.last?.last?.role == .user ? 1 : 0)
@@ -107,7 +107,7 @@ enum ContextManager {
         let prompt = PromptResolver.effective(provider: provider, conversation: conversation, settings: settings)
         let covered = Set(conversation.activeSummary?.coveredMessageIDs ?? [])
         let uncovered = groups.filter { group in !group.allSatisfy { covered.contains($0.id) } }
-        let input = estimate(uncovered.flatMap { $0 }, reasoning: tools && provider.kind == .deepSeek) + estimate(prompt) + estimate(conversation.activeSummary?.text ?? "") + (tools ? 900 : 64)
+        let input = estimate(uncovered.flatMap { $0 }, reasoning: tools && (provider.kind == .deepSeek || provider.kind == .workBuddy)) + estimate(prompt) + estimate(conversation.activeSummary?.text ?? "") + (tools ? 900 : 64)
         let keep = max(1, options.recentTurns) + (groups.last?.last?.role == .user ? 1 : 0)
         return groups.count > keep && Int(Double(input) * min(2, max(0.5, options.calibration ?? 1))) + options.outputBudget >= Int(Double(budget) * min(0.9, max(0.5, options.threshold)))
     }

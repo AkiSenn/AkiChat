@@ -10,6 +10,7 @@ struct AdvancedConversationView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     NoticeBanner()
+                    if store.provider?.supportsThinking == true { Card { Text("模型思考设置").font(.headline); ReasoningControls() } }
                     contextCard
                     summaryCard
                     promptCard
@@ -115,6 +116,9 @@ struct AdvancedConversationView: View {
             Label("外部请求与费用", systemImage: "hand.raised").font(.headline)
             Toggle("同意外部搜索与额外摘要请求", isOn: global(\.externalConsent))
             Text("搜索词、网页 URL 会发送至 DeepSeek 官方 Search / Fetch；摘要会将历史发送至当前或你指定的模型服务商。二者可能产生额外费用。密钥不会提供给模型或网页。关闭后不发起新的搜索或摘要请求；已进行的请求可用停止按钮取消。").font(.caption).foregroundColor(.secondary)
+            if store.provider?.kind == .workBuddy {
+                Text("Hub Key 仅用于网关聊天。此处联网需单独配置官方 DeepSeek Key；未接入 Hub Responses 联网，不会由网关重复执行客户端工具。").font(.caption).foregroundColor(.secondary)
+            }
             Picker("搜索密钥来源", selection: global(\.searchProviderID)) {
                 Text("首个官方 DeepSeek 配置").tag(nil as UUID?)
                 ForEach(store.providers.filter { $0.kind == .deepSeek && URL(string: $0.baseURL)?.host == "api.deepseek.com" }) { Text($0.name).tag(Optional($0.id)) }

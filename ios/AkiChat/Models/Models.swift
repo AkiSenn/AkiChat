@@ -20,7 +20,7 @@ struct Provider: Codable, Identifiable, Equatable {
     var requestsStreamingUsage = false
     var advanced: ProviderOptions?
     static let deepSeek = Provider(name: "DeepSeek", baseURL: "https://api.deepseek.com",
-        modelID: "deepseek-flash", displayName: "DeepSeek V4.1 Flash 1017", kind: .deepSeek,
+        modelID: "deepseek-flash", displayName: "deepseek-flash", kind: .deepSeek,
         supportsVision: true, supportsThinking: true, requestsStreamingUsage: true)
 }
 
@@ -139,10 +139,12 @@ enum AppError: LocalizedError {
         case .validation(let s), .storage(let s): return s
         case .http(let code):
             switch code {
-            case 401, 403: return "认证失败（\(code)），请检查 API Key 和权限。"
+            case 401: return "认证失败（401），请检查 API Key；Hub 需要网关 Key，不是面板密码。"
+            case 403: return "权限不足（403），请检查 Key 是否启用及模型白名单、区域与账号权限。"
             case 402: return "余额不足（402），请检查服务商账户。"
-            case 429: return "请求过于频繁或额度不足（429），请稍后重试。"
-            case 400, 404, 422: return "请求被拒绝（\(code)），请检查地址、模型 ID 和能力设置。"
+            case 429: return "限流或额度不足（429），也可能是网关账号额度或模型冷却，请稍后重试。"
+            case 400, 422: return "请求被拒绝（\(code)），请检查模型是否启用、Key 白名单、区域与参数能力。"
+            case 404, 405: return "接口不可用（\(code)），请检查地址和路径；模型列表不可用时可手动添加模型。"
             default: return "服务响应错误（HTTP \(code)），请稍后重试。"
             }
         case .malformed: return "服务返回了无法解析的数据，请检查接口兼容性。"

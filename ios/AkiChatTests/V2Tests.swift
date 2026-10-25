@@ -115,7 +115,7 @@ final class WorkBuddyHubCompatibilityTests: XCTestCase {
         c.thinking = false
         let offRequest = try RequestBuilder.make(provider: provider, key: "test-key", conversation: c, settings: AppSettings(), stream: false)
         let off = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(offRequest.httpBody)) as? [String: Any])
-        XCTAssertNil(off["reasoning_effort"])
+        XCTAssertEqual(off["reasoning_effort"] as? String, "medium") // Unknown disable support must not claim thinking is off.
     }
 
     func testPrivateLANHTTPRequiresExplicitOptIn() throws {

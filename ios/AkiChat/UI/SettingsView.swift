@@ -39,10 +39,7 @@ struct SettingsView: View {
                         TextEditor(text: setting(\.systemPrompt)).frame(height: 110).padding(6).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2)))
                         Text("上下文与输出预算按会话配置。普通请求省略思考历史；DeepSeek 工具请求保留原始轮次的思考字段。").font(.caption).foregroundColor(.secondary)
                         Toggle("流式响应", isOn: setting(\.streaming))
-                        Picker("推理强度", selection: Binding(get: { store.effort }, set: { store.setEffort($0) })) {
-                            ForEach(ReasoningEffort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }.pickerStyle(SegmentedPickerStyle())
-                        Text("推理强度仅用于 DeepSeek 深度思考。").font(.caption).foregroundColor(.secondary)
+                        ReasoningControls()
                     }
                     Card {
                         Label("生成参数", systemImage: "slider.horizontal.3").font(.headline)
@@ -61,14 +58,14 @@ struct SettingsView: View {
                         Label("本地数据", systemImage: "externaldrive").font(.headline)
                         Text("\(store.conversations.count) 个会话 · 无登录 · 无遥测").font(.caption).foregroundColor(.secondary)
                         Button("导出全部会话 JSON") {
-                            do { sharing = try ShareFile.make(data: ExportService.json(store.conversations), ext: "json") }
+                            do { sharing = try ShareFile.make(data: ExportService.json(store.exportConversations()), ext: "json") }
                             catch { store.notice = error.localizedDescription }
                         }
                         Button("清空当前会话") { deletion = .conversation }.foregroundColor(.red)
                         Button("删除全部聊天记录") { deletion = .all }.foregroundColor(.red)
                     }
                     Card {
-                        Text("AkiChat " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.0")).font(.headline)
+                        Text("AkiChat " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1")).font(.headline)
                         Text("Created by AkiSenn\nBuilt with OpenAI Codex").font(.footnote)
                         Text("为 iPhone 与长久使用而写。独立原生实现，MIT License。无第三方运行时依赖。")
                             .font(.footnote).foregroundColor(.secondary)
