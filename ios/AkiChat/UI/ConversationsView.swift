@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct ConversationsView: View {
     var onSelect: (() -> Void)? = nil
     var onSettings: (() -> Void)? = nil
+    var onCharacters: (() -> Void)? = nil
     @EnvironmentObject var store: AppStore
     @Environment(\.presentationMode) var presentation
     @State private var query = ""
@@ -53,6 +54,7 @@ struct ConversationsView: View {
                     }
                     if filtered.isEmpty { Text("没有匹配的会话").foregroundColor(.secondary).padding(40) }
                     Text("长按会话可重命名、导出或删除").font(.caption).foregroundColor(.secondary)
+                    if let onCharacters = onCharacters { Button(action: onCharacters) { Label("角色库", systemImage: "person.crop.square").frame(minHeight: 44) }.accessibilityIdentifier("character-library") }
                     if let onSettings = onSettings { Button(action: onSettings) { Label("应用设置", systemImage: "gearshape").frame(minHeight: 44) } }
                 }.padding(18)
             }.background(Theme.background).navigationTitle("对话空间")

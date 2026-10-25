@@ -176,6 +176,7 @@ struct GlobalOptions: Codable, Equatable {
     var searchConsent: Bool? // nil reads the legacy shared consent without modifying it
     var searchProviderID: UUID?
     var searchCount = 5
+    var roleplayUserName: String?
     var imageDimension = 2048
     var imageQuality = 0.82
 }

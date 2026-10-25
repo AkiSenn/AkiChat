@@ -127,6 +127,28 @@ final class InteractionTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["联网搜索"].waitForExistence(timeout: 5))
         capture(app, name: "search-panel-actual-button-event")
     }
+    func testCharacterLibraryCreatesLocalGreetingAndKeepsRealModelSelector() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-fixture", "0", "--ui-characters"]; app.launch()
+        XCTAssertTrue(app.buttons["model-selector"].waitForExistence(timeout: 15))
+        app.buttons["会话抽屉"].tap(); app.buttons["character-library"].tap()
+        XCTAssertTrue(app.navigationBars["角色库"].waitForExistence(timeout: 5))
+        app.buttons["import-character"].tap()
+        let cancel = app.buttons.matching(NSPredicate(format: "label IN %@", ["Cancel", "取消"])).firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10)); cancel.tap()
+        let role = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "星海旅人")).firstMatch
+        XCTAssertTrue(role.waitForExistence(timeout: 5)); role.tap()
+        let start = app.buttons["start-character-chat"]
+        if !start.isHittable { app.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(start.waitForExistence(timeout: 5)); start.tap()
+        XCTAssertTrue(app.buttons["model-selector"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["model-selector"].label.contains("星海旅人"))
+        XCTAssertTrue(app.staticTexts["开场白 · 本地"].exists)
+        XCTAssertFalse(app.buttons["重试回答"].exists)
+        app.buttons["model-selector"].tap(); app.buttons["choose-model-deepseek-v4-pro"].tap()
+        XCTAssertTrue(app.buttons["model-selector"].label.contains("星海旅人"))
+        XCTAssertTrue(app.buttons["model-selector"].label.contains("deepseek-v4-pro"))
+        capture(app, name: "character-chat-local-opening-and-model")
+    }
     func testHundredMessageScrollAndModelPanel() {
         let app = launch(100)
         app.scrollViews.firstMatch.swipeDown()

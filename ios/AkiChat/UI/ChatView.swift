@@ -7,7 +7,7 @@ struct ChatView: View {
     @State private var editedText = ""
     @State private var showDrawer = false
     private enum ChatSheet: Identifiable {
-        case sessions, settings, providers, models, photos, advanced, thinking, search, edit(Message)
+        case sessions, settings, providers, models, photos, advanced, thinking, search, characters, edit(Message)
         var id: String {
             switch self {
             case .sessions: return "sessions"
@@ -18,6 +18,7 @@ struct ChatView: View {
             case .advanced: return "advanced"
             case .thinking: return "thinking"
             case .search: return "search"
+            case .characters: return "characters"
             case .edit(let message): return message.id.uuidString
             }
         }
@@ -32,7 +33,7 @@ struct ChatView: View {
         }
         if showDrawer {
             Color.black.opacity(0.3).edgesIgnoringSafeArea(.all).onTapGesture { withAnimation(.easeOut(duration: 0.2)) { showDrawer = false } }
-            ConversationsView(onSelect: { withAnimation(.easeOut(duration: 0.2)) { showDrawer = false } }, onSettings: { showDrawer = false; sheet = .settings }).environmentObject(store)
+            ConversationsView(onSelect: { withAnimation(.easeOut(duration: 0.2)) { showDrawer = false } }, onSettings: { showDrawer = false; sheet = .settings }, onCharacters: { showDrawer = false; sheet = .characters }).environmentObject(store)
                 .frame(width: min(350, UIScreen.main.bounds.width * 0.86)).background(Theme.background).transition(.move(edge: .leading))
         }
         }
@@ -50,6 +51,7 @@ struct ChatView: View {
             case .advanced: AdvancedConversationView().environmentObject(store)
             case .thinking: ThinkingPanel().environmentObject(store)
             case .search: SearchPanel().environmentObject(store)
+            case .characters: CharactersView(onStarted: { sheet = nil }).environmentObject(store)
             case .photos:
                 PhotoPicker(completion: { result in
                     switch result {
@@ -91,10 +93,10 @@ struct ChatView: View {
                 sheet = .models
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(store.providerName).font(.system(size: 16, weight: .semibold)).lineLimit(1)
+                    Text(store.current?.character?.snapshot.fields.name ?? store.providerName).font(.system(size: 16, weight: .semibold)).lineLimit(1)
                     HStack(spacing: 4) {
                         Circle().fill(store.isGenerating ? Color.orange : Theme.accent).frame(width: 5, height: 5)
-                        Text(store.selectedModelLabel).font(.caption2).foregroundColor(.secondary).lineLimit(1)
+                        Text((store.current?.character == nil ? "" : store.providerName + " · ") + store.selectedModelLabel).font(.caption2).foregroundColor(.secondary).lineLimit(1)
                         Image(systemName: "chevron.down").font(.system(size: 9)).foregroundColor(.secondary)
                     }
                 }.foregroundColor(.primary)
@@ -107,7 +109,7 @@ struct ChatView: View {
         ChatTimelineView(presentation: store.chat, fontSize: store.settings.fontSize,
                          onRetry: { store.regenerate(from: $0) },
                          onEdit: { editedText = $0.content; sheet = .edit($0) },
-                         welcome: AnyView(welcome))
+                         welcome: AnyView(welcome), character: store.current?.character.map { CharacterIdentity($0.snapshot) }, greetingID: store.current?.character?.greetingMessageID)
     }
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 20) {

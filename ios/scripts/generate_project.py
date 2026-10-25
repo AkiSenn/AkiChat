@@ -39,7 +39,7 @@ def generate():
     group = obj("main-group", f"isa = PBXGroup; children = {array(source_refs + test_refs + ui_refs + [products])}; sourceTree = {q('<group>')};")
     for name, kind, files in [("app-sources", "PBXSourcesBuildPhase", source_builds), ("test-sources", "PBXSourcesBuildPhase", test_builds), ("ui-sources", "PBXSourcesBuildPhase", ui_builds), ("ui-frameworks", "PBXFrameworksBuildPhase", []), ("app-resources", "PBXResourcesBuildPhase", resources), ("app-frameworks", "PBXFrameworksBuildPhase", []), ("test-frameworks", "PBXFrameworksBuildPhase", [])]:
         obj(name, f"isa = {kind}; buildActionMask = 2147483647; files = {array(files)}; runOnlyForDeploymentPostprocessing = 0;")
-    common = {"IPHONEOS_DEPLOYMENT_TARGET": "14.0", "SWIFT_VERSION": "5.0", "CLANG_ENABLE_MODULES": "YES", "SDKROOT": "iphoneos", "TARGETED_DEVICE_FAMILY": "1", "ENABLE_STRICT_OBJC_MSGSEND": "YES", "CLANG_WARN_UNGUARDED_AVAILABILITY": "YES_AGGRESSIVE"}
+    common = {"IPHONEOS_DEPLOYMENT_TARGET": "14.0", "SWIFT_VERSION": "5.0", "CLANG_ENABLE_MODULES": "YES", "SDKROOT": "iphoneos", "OTHER_LDFLAGS": "$(inherited) -lz", "TARGETED_DEVICE_FAMILY": "1", "ENABLE_STRICT_OBJC_MSGSEND": "YES", "CLANG_WARN_UNGUARDED_AVAILABILITY": "YES_AGGRESSIVE"}
     for owner in ["project", "app", "tests", "ui-tests"]:
         configs = []
         for configuration in ["Debug", "Release"]:

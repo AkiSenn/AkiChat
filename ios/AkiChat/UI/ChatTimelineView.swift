@@ -6,6 +6,8 @@ struct ChatTimelineView: View {
     var onRetry: (UUID) -> Void
     var onEdit: (Message) -> Void
     let welcome: AnyView
+    var character: CharacterIdentity? = nil
+    var greetingID: UUID? = nil
     @StateObject private var follow = ScrollFollowController()
     var body: some View {
         ScrollViewReader { proxy in
@@ -14,7 +16,7 @@ struct ChatTimelineView: View {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         if presentation.rows.isEmpty { welcome }
                         ForEach(presentation.rows) { cell in
-                            LiveMessageRow(cell: cell, fontSize: fontSize, onRetry: onRetry, onEdit: onEdit).id(cell.id)
+                            LiveMessageRow(cell: cell, fontSize: fontSize, onRetry: onRetry, onEdit: onEdit, character: character, greetingID: greetingID).id(cell.id)
                         }
                         Color.clear.frame(height: 1).id("latest")
                     }.padding(20).background(ScrollMetricsReader(controller: follow))
@@ -37,8 +39,10 @@ private struct LiveMessageRow: View {
     let fontSize: Double
     var onRetry: (UUID) -> Void
     var onEdit: (Message) -> Void
+    var character: CharacterIdentity?
+    var greetingID: UUID?
     var body: some View {
         MessageRow(message: cell.message, fontSize: fontSize, isActive: cell.message.state == .generating,
-                   onRetry: { onRetry(cell.id) }, onEdit: { onEdit(cell.message) }).equatable()
+                   onRetry: { onRetry(cell.id) }, onEdit: { onEdit(cell.message) }, character: character, greetingID: greetingID).equatable()
     }
 }

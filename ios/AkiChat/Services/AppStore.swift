@@ -5,6 +5,7 @@ import UIKit
 /// All published state is mutated on main; database work runs serially off main.
 final class AppStore: ObservableObject {
     @Published private(set) var conversations: [Conversation] = [] { didSet { dirtyRecords.insert(.conversations) } }
+    @Published private(set) var characters: [CharacterRecord] = [] { didSet { dirtyRecords.insert(.characters) } }
     @Published private(set) var providers: [Provider] = [] { didSet { dirtyRecords.insert(.providers); modelListCache.invalidate() } }
     @Published private(set) var settings = AppSettings() { didSet { dirtyRecords.insert(.settings) } }
     @Published private(set) var selectedID: UUID?
@@ -26,7 +27,7 @@ final class AppStore: ObservableObject {
         return id.isEmpty ? "选择模型" : id
     }
     private enum RecordKey: String, CaseIterable {
-        case conversations = "conversations.v1", providers = "providers.v1", settings = "settings.v1", catalogs = "catalogs.v2"
+        case conversations = "conversations.v1", providers = "providers.v1", settings = "settings.v1", catalogs = "catalogs.v2", characters = "characters.v1"
     }
     private var dirtyRecords = Set(RecordKey.allCases)
     private var database: RecordDatabase?
@@ -72,6 +73,7 @@ final class AppStore: ObservableObject {
             // Decode everything before enabling writes; never overwrite an unreadable store.
             providers = (try db.load("providers.v1", as: [Provider].self) ?? [.deepSeek, .openAI]).map(ProviderNaming.normalize)
             catalogs = try db.load("catalogs.v2", as: [ModelCatalog].self) ?? []
+            characters = try db.load("characters.v1", as: [CharacterRecord].self) ?? []
             settings = try db.load("settings.v1", as: AppSettings.self) ?? AppSettings()
             if settings.advanced == nil { settings.options = settings.options }
             // Snapshot the former shared consent once; summary changes must never re-authorize search.
@@ -175,6 +177,47 @@ final class AppStore: ObservableObject {
         let selected = provider
         var c = Conversation(providerID: selected?.id ?? p.id)
         if let modelID = selected?.modelID { c.options.modelID = modelID }
+        conversations.insert(c, at: 0); selectedID = c.id; loadSelection(); renderRevision += 1; persist(immediate: true)
+    }
+    func saveCharacter(_ imported: CharacterImport, completion: @escaping (Result<UUID, Error>) -> Void) {
+        guard database != nil else { completion(.failure(AppError.storage("数据库不可用，未保存角色"))); return }
+        let size = imported.record.rawJSON.count + (imported.record.avatarJPEG?.count ?? 0)
+        guard characters.count < 128, characters.reduce(size, { $0 + $1.rawJSON.count + ($1.avatarJPEG?.count ?? 0) }) <= 32 * 1024 * 1024 else {
+            completion(.failure(CharacterImportError.limit("角色库最多 128 张、设定与缩略图合计 32 MiB"))); return
+        }
+        disk.async { [weak self] in
+            let result = Result { () throws -> CharacterRecord in
+                try CharacterCardParser.validate(imported.record)
+                var value = imported.record
+                if let png = imported.originalPNG { try CharacterAssetStore.save(png, id: value.id); value.originalPNGAssetID = value.id }
+                return value
+            }
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                do {
+                    let value = try result.get()
+                    guard self.characters.count < 128, !self.characters.contains(where: { $0.id == value.id }),
+                          self.characters.reduce(value.rawJSON.count + (value.avatarJPEG?.count ?? 0), { $0 + $1.rawJSON.count + ($1.avatarJPEG?.count ?? 0) }) <= 32 * 1024 * 1024 else { throw CharacterImportError.limit("角色数量、容量超限或已保存") }
+                    self.characters.append(value); self.persist(immediate: true); completion(.success(value.id))
+                } catch { completion(.failure(error)) }
+            }
+        }
+    }
+    func deleteCharacter(_ id: UUID) { characters.removeAll { $0.id == id }; persist(immediate: true) }
+    func newCharacterConversation(_ card: CharacterRecord, greeting: Int, providerID: UUID, modelID: String) throws {
+        guard !isGenerating else { throw AppError.validation("请先停止生成，再创建角色对话。") }
+        try CharacterCardParser.validate(card)
+        guard providers.contains(where: { $0.id == providerID }), models(for: providerID).contains(where: { $0.id == modelID }) else { throw AppError.validation("请先选择一个已配置的真实模型。") }
+        let greetings = [card.fields.firstMessage] + card.fields.alternateGreetings
+        guard greetings.indices.contains(greeting) else { throw CharacterImportError.invalid }
+        commitDraft()
+        var c = Conversation(title: card.fields.name, providerID: providerID)
+        c.options.modelID = modelID
+        let text = CharacterPrompt.render(greetings[greeting], character: card.fields.name, user: CharacterPrompt.userName(settings))
+        guard !text.contains(CharacterPrompt.limitMarker) else { throw CharacterImportError.limit("开场白变量展开过大") }
+        let message = text.isEmpty ? nil : Message(role: .assistant, content: text)
+        if let message = message { c.messages = [message] }
+        c.character = CharacterBinding(characterID: card.id, snapshot: card, greetingMessageID: message?.id)
         conversations.insert(c, at: 0); selectedID = c.id; loadSelection(); renderRevision += 1; persist(immediate: true)
     }
     func selectConversation(_ id: UUID) { stop(); commitDraft(); selectedID = id; loadSelection(); renderRevision += 1; persist(immediate: true) }
@@ -317,6 +360,7 @@ final class AppStore: ObservableObject {
         beginGeneration()
     }
     func regenerate(from id: UUID) {
+        guard id != current?.character?.greetingMessageID else { notice = "开场白来自角色卡，不需要付费重新生成；可在角色详情中选择开场白创建新对话。"; return }
         stop()
         guard let index = messages.firstIndex(where: { $0.id == id }),
               let userIndex = messages[...index].lastIndex(where: { $0.role == .user }) else { return }
@@ -528,6 +572,7 @@ final class AppStore: ObservableObject {
         let conversationSnapshot: [Conversation]? = keys.contains(.conversations) ? conversations : nil
         let providerSnapshot: [Provider]? = keys.contains(.providers) ? providers : nil
         let settingSnapshot: AppSettings? = keys.contains(.settings) ? settings : nil
+        let characterSnapshot: [CharacterRecord]? = keys.contains(.characters) ? characters : nil
         let catalogSnapshot: [ModelCatalog]? = keys.contains(.catalogs) ? catalogs : nil
         disk.async { [weak self] in
             var remaining = keys
@@ -538,6 +583,7 @@ final class AppStore: ObservableObject {
                     case .providers: try database.save(providerSnapshot!, key: key.rawValue)
                     case .settings: try database.save(settingSnapshot!, key: key.rawValue)
                     case .catalogs: try database.save(catalogSnapshot!, key: key.rawValue)
+                    case .characters: try database.save(characterSnapshot!, key: key.rawValue)
                     }
                     remaining.remove(key)
                 }

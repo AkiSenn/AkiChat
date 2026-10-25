@@ -2,6 +2,9 @@ import Foundation
 
 enum PromptResolver {
     static func effective(provider: Provider, conversation: Conversation, settings: AppSettings) -> String {
+        CharacterPrompt.compose(original: base(provider: provider, conversation: conversation, settings: settings), conversation: conversation, settings: settings)
+    }
+    private static func base(provider: Provider, conversation: Conversation, settings: AppSettings) -> String {
         guard settings.options.promptEnabled else { return "" }
         let presets = settings.options.presets
         func layer(_ label: String, text: String, ids: [UUID]) -> String {
@@ -74,13 +77,13 @@ enum ContextManager {
         let requestedOutput = conversation.advanced == nil ? settings.maxTokens : options.outputBudget
         let output = min(max(256, requestedOutput), max(256, provider.options.outputLimit), max(256, budget / 2))
         let prompt = PromptResolver.effective(provider: provider, conversation: conversation, settings: settings)
-        let overhead = (provider.options.supportsSystem ? estimate(prompt) : 0) + (tools ? 900 : 0) + 64
+        let overhead = ((provider.options.supportsSystem || conversation.character != nil) ? estimate(prompt) : 0) + (tools ? 900 : 0) + 64 + (conversation.character == nil ? 0 : estimate(CharacterPrompt.post(conversation, settings: settings)) + 64)
         let reasoning = tools && (provider.kind == .deepSeek || provider.kind == .workBuddy)
         var groups = turns(conversation.messages, tools: tools)
         let fullCount = groups.count
         let keep = max(1, options.recentTurns) + (groups.last?.last?.role == .user ? 1 : 0)
         let scale = min(2, max(0.5, options.calibration ?? 1))
-        let fullEstimate = estimate(groups.flatMap { $0 }, reasoning: reasoning) + overhead
+        let fullEstimate = estimate(CharacterPrompt.greeting(in: conversation, groups: groups) + groups.flatMap { $0 }, reasoning: reasoning) + overhead
         let strategy = options.strategy
         let useSummary = strategy == .summary || (strategy == .automatic && options.autoCompress)
         let active = useSummary ? conversation.activeSummary : nil
@@ -91,11 +94,11 @@ enum ContextManager {
         if strategy == .window { groups = Array(groups.suffix(keep)) }
         let summary = active?.text
         let summaryCost = summary.map(estimate) ?? 0
-        func cost(_ groups: [[Message]]) -> Int { Int(ceil(Double(estimate(groups.flatMap { $0 }, reasoning: reasoning) + overhead + summaryCost) * scale)) }
+        func cost(_ groups: [[Message]]) -> Int { Int(ceil(Double(estimate(CharacterPrompt.greeting(in: conversation, groups: groups) + groups.flatMap { $0 }, reasoning: reasoning) + overhead + summaryCost) * scale)) }
         if strategy == .full && cost(groups) + output > budget { throw AppError.validation("完整历史超过上下文预算，请选择滑动窗口、摘要或提高预算；本地原始记录会保留。") }
         while groups.count > 1 && cost(groups) + output > budget { groups.removeFirst() }
         guard cost(groups) + output <= budget else { throw AppError.validation("当前消息、提示词或工具结果已超过上下文预算，请减少附件/消息长度或提高预算。") }
-        return ContextPlan(messages: groups.flatMap { $0 }, summary: summary, estimatedTokens: cost(groups), fullEstimate: fullEstimate,
+        return ContextPlan(messages: CharacterPrompt.greeting(in: conversation, groups: groups) + groups.flatMap { $0 }, summary: summary, estimatedTokens: cost(groups), fullEstimate: fullEstimate,
             totalBudget: budget, outputBudget: output, omittedTurns: fullCount - groups.count,
             needsCompression: options.autoCompress && strategy != .window && fullEstimate + output >= Int(Double(budget) * min(0.9, max(0.5, options.threshold))) && fullCount > max(1, options.recentTurns))
     }
@@ -107,7 +110,7 @@ enum ContextManager {
         let prompt = PromptResolver.effective(provider: provider, conversation: conversation, settings: settings)
         let covered = Set(conversation.activeSummary?.coveredMessageIDs ?? [])
         let uncovered = groups.filter { group in !group.allSatisfy { covered.contains($0.id) } }
-        let input = estimate(uncovered.flatMap { $0 }, reasoning: tools && (provider.kind == .deepSeek || provider.kind == .workBuddy)) + estimate(prompt) + estimate(conversation.activeSummary?.text ?? "") + (tools ? 900 : 64)
+        let input = estimate(uncovered.flatMap { $0 }, reasoning: tools && (provider.kind == .deepSeek || provider.kind == .workBuddy)) + estimate(prompt) + (conversation.character == nil ? 0 : estimate(CharacterPrompt.post(conversation, settings: settings)) + estimate(CharacterPrompt.greeting(in: conversation, groups: groups), reasoning: false)) + estimate(conversation.activeSummary?.text ?? "") + (tools ? 900 : 64)
         let keep = max(1, options.recentTurns) + (groups.last?.last?.role == .user ? 1 : 0)
         return groups.count > keep && Int(Double(input) * min(2, max(0.5, options.calibration ?? 1))) + options.outputBudget >= Int(Double(budget) * min(0.9, max(0.5, options.threshold)))
     }

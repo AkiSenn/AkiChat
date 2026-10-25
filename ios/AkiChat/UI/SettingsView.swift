@@ -35,6 +35,8 @@ struct SettingsView: View {
                     }
                     Card {
                         Label("对话偏好", systemImage: "text.bubble").font(.headline)
+                        TextField("角色对话中的用户称呼（默认：旅行者）", text: Binding(get: { store.settings.options.roleplayUserName ?? "" }, set: { store.updateGlobalOption(\.roleplayUserName, Optional(String($0.prefix(60)))) }))
+                        Text("仅用于角色卡 {{user}} 变量，不改变普通聊天。").font(.caption).foregroundColor(.secondary)
                         Text("应用默认 System Prompt").font(.caption).foregroundColor(.secondary)
                         TextEditor(text: setting(\.systemPrompt)).frame(height: 110).padding(6).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2)))
                         Text("上下文与输出预算按会话配置。普通请求省略思考历史；DeepSeek 工具请求保留原始轮次的思考字段。").font(.caption).foregroundColor(.secondary)

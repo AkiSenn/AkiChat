@@ -67,6 +67,7 @@ struct Conversation: Codable, Identifiable, Equatable {
     var advanced: ConversationOptions?
     var summaries: [SummaryVersion]?
     var activeSummaryID: UUID?
+    var character: CharacterBinding? // Optional: old ordinary conversations decode unchanged.
 }
 struct AppSettings: Codable, Equatable {
     var appearance: AppearanceMode = .automatic
@@ -97,6 +98,13 @@ enum ExportService {
         guard archive.conversations.count <= 5000 else { throw AppError.validation("会话数量超过导入限制") }
         var ids = Set<UUID>()
         for c in archive.conversations {
+            if let binding = c.character {
+                try CharacterCardParser.validate(binding.snapshot)
+                guard binding.characterID == binding.snapshot.id else { throw CharacterImportError.invalid }
+                if let greeting = binding.greetingMessageID {
+                    guard c.messages.first?.id == greeting, c.messages.first?.role == .assistant else { throw CharacterImportError.invalid }
+                }
+            }
             let options = c.options
             guard (1...32).contains(options.context.recentTurns), (1024...4000000).contains(options.context.inputBudget),
                   (256...393216).contains(options.context.outputBudget), (1...8).contains(options.maxToolRounds),
@@ -128,7 +136,7 @@ enum ExportService {
             m.content + tools + m.images.map { "\n\n![图片](\($0.dataURL))" }.joined() + sources + "\n\n"
         }.joined()
         let summaries = (c.summaries ?? []).map { "## 摘要版本 \($0.id)\n\n\($0.text)\n\n覆盖 \($0.coveredMessageIDs.count) 条原始消息；额外用量 \($0.usage?.total_tokens.map(String.init) ?? "未返回") tokens。\n\n" }.joined()
-        return "# \(c.title)\n\n" + messages + summaries
+        return "# \(c.title)\n\n" + (c.character.map { "角色：" + $0.snapshot.fields.name + "（角色设定保存在 JSON 导出中）\n\n" } ?? "") + messages + summaries
     }
 }
 

@@ -7,17 +7,21 @@ struct MessageRow: View, Equatable {
     let isActive: Bool
     var onRetry: () -> Void
     var onEdit: () -> Void
+    var character: CharacterIdentity? = nil
+    var greetingID: UUID? = nil
     @State private var expanded = false
     @State private var toolsExpanded = false
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.message == rhs.message && lhs.fontSize == rhs.fontSize && lhs.isActive == rhs.isActive
+        lhs.message == rhs.message && lhs.fontSize == rhs.fontSize && lhs.isActive == rhs.isActive && lhs.character == rhs.character && lhs.greetingID == rhs.greetingID
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
-                Image(systemName: message.role == .user ? "person.crop.circle.fill" : "sparkles")
-                    .foregroundColor(message.role == .user ? .secondary : Theme.accent)
-                Text(message.role == .user ? "你" : "AKI").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundColor(.secondary)
+                if message.role == .assistant, let identity = character { CharacterAvatar(identity: identity).frame(width: 28, height: 28) }
+                else { Image(systemName: message.role == .user ? "person.crop.circle.fill" : "sparkles")
+                    .foregroundColor(message.role == .user ? .secondary : Theme.accent) }
+                Text(message.role == .user ? "你" : (character?.name ?? "AKI")).font(.system(size: 11, weight: .bold, design: .rounded)).foregroundColor(.secondary)
+                if message.id == greetingID { Text("开场白 · 本地").font(.caption2).foregroundColor(.secondary) }
                 Spacer()
                 if isActive { ProgressView().scaleEffect(0.7) }
             }
@@ -73,7 +77,7 @@ struct MessageRow: View, Equatable {
                     Button { UIPasteboard.general.string = message.content } label: { Image(systemName: "doc.on.doc").frame(width: 44, height: 44) }.accessibilityLabel("复制消息")
                     if message.role == .user {
                         Button(action: onEdit) { Image(systemName: "pencil").frame(width: 44, height: 44) }.accessibilityLabel("编辑并重新发送")
-                    } else {
+                    } else if message.id != greetingID {
                         Button(action: onRetry) { Label("重新生成", systemImage: "arrow.clockwise").frame(minHeight: 44) }.accessibilityLabel("重试回答")
                     }
                 }.font(.system(size: 11)).foregroundColor(.secondary)
