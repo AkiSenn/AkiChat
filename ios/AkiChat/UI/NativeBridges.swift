@@ -34,7 +34,14 @@ final class ComposerTextView: UITextView {
     var onHeight: ((CGFloat) -> Void)?
     private var measuredWidth: CGFloat = 0
     private var revision = 0
-    private lazy var heightProbe = ComposerHeightProbe()
+    private var saturatedPrefixEnd = 0
+    private var sizingWidth: CGFloat = 0
+    private var sizingInsets = UIEdgeInsets.zero
+    private var sizingPadding: CGFloat = 0
+    private var sizingFont: UIFont?
+    private weak var observedStorage: NSTextStorage?
+    private var storageObserver: NSObjectProtocol?
+    private lazy var prefixSizer = UITextView()
     override func layoutSubviews() {
         super.layoutSubviews()
         if abs(bounds.width - measuredWidth) > 0.5 { measureHeight() }
@@ -47,32 +54,45 @@ final class ComposerTextView: UITextView {
         DispatchQueue.main.async { [weak self] in if self?.revision == current { self?.onHeight?(height) } }
     }
     func fittingComposerHeight() -> CGFloat {
-        // Keep the native short-input path. For long drafts, establish overflow
-        // using a finite container instead of laying out the entire document.
-        if ((text ?? "") as NSString).length > 512, let content = attributedText,
-           heightProbe.overflows(content, width: bounds.width, insets: textContainerInset,
-                                 padding: textContainer.lineFragmentPadding) { return 140 }
-        return min(140, max(42, ceil(sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height)))
+        if saturatedPrefixEnd > 0 {
+            if sizingWidth == bounds.width, sizingInsets == textContainerInset,
+               sizingPadding == textContainer.lineFragmentPadding, sizingFont == font,
+               observedStorage === textStorage { return 140 }
+            saturatedPrefixEnd = 0
+        }
+        let height = min(140, max(42, ceil(sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height)))
+        if height == 140 { cacheSaturatedPrefixIfPossible() }
+        return height
     }
-}
-
-private final class ComposerHeightProbe {
-    private let storage = NSTextStorage()
-    private let manager = NSLayoutManager()
-    private let container = NSTextContainer(size: .zero)
-    init() { storage.addLayoutManager(manager); manager.addTextContainer(container) }
-    func overflows(_ content: NSAttributedString, width: CGFloat, insets: UIEdgeInsets, padding: CGFloat) -> Bool {
-        // Separate measurement storage preserves the editor's native TextKit engine,
-        // selection and marked text. Never access UITextView.layoutManager here.
-        storage.setAttributedString(content)
-        container.lineFragmentPadding = padding
-        container.size = CGSize(width: max(1, width - insets.left - insets.right),
-                                height: max(1, 140 - insets.top - insets.bottom))
-        manager.ensureLayout(for: container)
-        let glyphs = manager.glyphRange(for: container)
-        let characters = manager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
-        return NSMaxRange(characters) < storage.length
+    private func cacheSaturatedPrefixIfPossible() {
+        let storage = textStorage
+        guard storage.length > 512 else { return }
+        let prefix = (storage.string as NSString).substring(to: 512) as NSString
+        let newline = prefix.range(of: "\n", options: .backwards)
+        guard newline.location != NSNotFound, newline.location > 0 else { return }
+        var end = newline.location
+        if prefix.character(at: end - 1) == 13 { end -= 1 } // exclude CRLF, including its extra empty line
+        guard end > 0 else { return }
+        // A completed paragraph prefix is independent of later edits. Measure
+        // without its final newline so the proof excludes the trailing empty line.
+        prefixSizer.font = font
+        prefixSizer.textContainerInset = textContainerInset
+        prefixSizer.textContainer.lineFragmentPadding = textContainer.lineFragmentPadding
+        prefixSizer.attributedText = storage.attributedSubstring(from: NSRange(location: 0, length: end))
+        guard ceil(prefixSizer.sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height) >= 140 else { return }
+        if observedStorage !== storage {
+            if let token = storageObserver { NotificationCenter.default.removeObserver(token) }
+            observedStorage = storage
+            storageObserver = NotificationCenter.default.addObserver(forName: NSTextStorage.didProcessEditingNotification, object: storage, queue: nil) { [weak self] note in
+                guard let self = self, let changed = note.object as? NSTextStorage else { return }
+                if changed.editedRange.location < self.saturatedPrefixEnd { self.saturatedPrefixEnd = 0 }
+            }
+        }
+        saturatedPrefixEnd = NSMaxRange(newline)
+        sizingWidth = bounds.width; sizingInsets = textContainerInset
+        sizingPadding = textContainer.lineFragmentPadding; sizingFont = font
     }
+    deinit { if let token = storageObserver { NotificationCenter.default.removeObserver(token) } }
 }
 struct ShareFile: Identifiable {
     var id = UUID()

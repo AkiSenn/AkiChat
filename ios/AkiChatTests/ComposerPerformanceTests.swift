@@ -13,7 +13,7 @@ final class ComposerPerformanceTests: XCTestCase {
     private func legacyHeight(_ view: UITextView) -> CGFloat {
         min(140, max(42, ceil(view.sizeThatFits(CGSize(width: view.bounds.width, height: .greatestFiniteMagnitude)).height)))
     }
-    func testBoundedHeightMatchesNativeAcrossScriptsAndWidths() {
+    func testCachedHeightMatchesNativeAcrossScriptsAndWidths() {
         let values = ["", "hello", "输入与中文候选", "مرحبا بالعالم", "👩🏽‍💻👨‍👩‍👧‍👦", "\n", "a\n\n",
                       String(repeating: "行\n", count: 300), String(repeating: "unbroken", count: 400),
                       String(repeating: "中英 emoji 👩🏽‍💻 text ", count: 200)]
@@ -45,11 +45,22 @@ final class ComposerPerformanceTests: XCTestCase {
             view.bounds.size.width = width
             XCTAssertEqual(view.fittingComposerHeight(), legacyHeight(view), accuracy: 1)
         }
+        view.text = String(repeating: "paragraph\n", count: 500)
+        XCTAssertEqual(view.fittingComposerHeight(), 140)
+        // Direct storage edits (including attributed edits) must invalidate the proof.
+        view.textStorage.replaceCharacters(in: NSRange(location: 0, length: view.textStorage.length), with: "short")
+        XCTAssertEqual(view.fittingComposerHeight(), 42)
+        view.text = String(repeating: "paragraph\n", count: 500)
+        _ = view.fittingComposerHeight()
+        view.textStorage.addAttribute(.font, value: UIFont.systemFont(ofSize: 1), range: NSRange(location: 0, length: view.textStorage.length))
+        XCTAssertEqual(view.fittingComposerHeight(), legacyHeight(view), accuracy: 1)
+        view.font = .systemFont(ofSize: 24)
+        XCTAssertEqual(view.fittingComposerHeight(), legacyHeight(view), accuracy: 1)
     }
     /// Paired main-thread measurements, same UIKit editor, different instances so
     /// the baseline's unlimited layout cannot warm the optimized editor's layout.
-    func testCompareNativeAndBoundedInputHeightAfterEdits() throws {
-        let fixtures = [("short", "draft"), ("wrapped-8k", String(repeating: "中英 text 👩🏽‍💻 ", count: 400)),
+    func testCompareNativeAndCachedInputHeightAfterEdits() throws {
+        let fixtures = [("short", "draft"), ("wrapped-6400", String(repeating: "中英 text 👩🏽‍💻 ", count: 400)),
                         ("multiline-2k", String(repeating: "行 text\n", count: 2000))]
         for (name, text) in fixtures {
             for trial in 0..<4 {
@@ -75,7 +86,7 @@ final class ComposerPerformanceTests: XCTestCase {
                 }
                 XCTAssertEqual(before.text, after.text)
                 let record: [String: Any] = ["fixture": name, "trial": trial, "edits": 12,
-                    "utf16Length": (text as NSString).length, "legacyMS": oldMS, "boundedMS": newMS,
+                    "utf16Length": (text as NSString).length, "legacyMS": oldMS, "cachedMS": newMS,
                     "system": UIDevice.current.systemVersion, "fpsMeasured": false]
                 print("COMPOSER_HEIGHT_BENCHMARK " + String(decoding: try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys]), as: UTF8.self))
             }
