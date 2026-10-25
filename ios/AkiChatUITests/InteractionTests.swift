@@ -113,6 +113,7 @@ final class InteractionTests: XCTestCase {
         app.buttons["search-button"].tap()
         let mode = app.segmentedControls["search-mode-picker"]
         XCTAssertTrue(mode.waitForExistence(timeout: 5)); mode.buttons["每次搜索"].tap()
+        app.scrollViews.firstMatch.swipeUp()
         app.switches["search-consent-toggle"].tap()
         app.buttons["完成"].tap()
         XCTAssertEqual(app.buttons["search-button"].value as? String, "已开启")

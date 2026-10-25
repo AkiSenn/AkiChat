@@ -85,7 +85,14 @@ final class FeaturePanelTests: XCTestCase {
                 let body = try! self.json(request)
                 XCTAssertNil(body["tools"]); XCTAssertNil(body["thinking"])
                 let messages = body["messages"] as! [[String: Any]]
-                XCTAssertTrue((messages.last?["content"] as? String)?.contains("https://example.com/source") == true)
+                let content = messages.last?["content"] as? String ?? ""
+                if let start = content.range(of: "<external_search_data>\n"),
+                   let end = content.range(of: "\n</external_search_data>", range: start.upperBound..<content.endIndex),
+                   let reference = try? JSONSerialization.jsonObject(with: Data(content[start.upperBound..<end.lowerBound].utf8)) as? [String: Any],
+                   let rows = reference["results"] as? [[String: Any]] {
+                    XCTAssertEqual(rows.first?["url"] as? String, "https://example.com/source")
+                    XCTAssertEqual(reference["untrusted_external_data"] as? Bool, true)
+                } else { XCTFail("Expected bounded JSON search reference") }
                 XCTAssertFalse(messages.contains { $0["role"] as? String == "tool" || $0["tool_calls"] != nil })
                 var reply = ChatSnapshot(); reply.content = "answer"
                 DispatchQueue.main.async { completion(.success(reply)) }
