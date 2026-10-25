@@ -17,7 +17,7 @@ SearchPanel 独立维护关闭/自动/每次、来源和搜索授权。复用既
 - 自动模式仅支持真实工具调用的模型；搜索工具白名单与高级日期/计算开关分开，不能因高级工具关闭而显示假联网。
 - 每次搜索：工具模型保留有界工具链；无工具模型先通过 SearchProviderService 搜索，成功后将有界、带真实 URL、标记为不可信的 JSON 参考加入请求副本，并计入上下文预算。返回消息保留原始用户内容与真实来源，不伪造 assistant 工具调用。空来源、错误或取消不继续向模型发送请求。
 - UI 普通搜索/思考控制只保留面板入口。控制台保留摘要独立费用授权、高级工具、上下文、提示词、图片和 Prefix；开启 Prefix 通过统一操作关闭联网，不在控制台提供第二个搜索设置器。
-- 新增的 reasoning 元数据及 searchConsent 均为 optional。旧共享 externalConsent 只作为尚无独立搜索选择时的兼容默认；明确拒绝搜索不会被摘要授权重新开启。不改数据库键、历史格式、Keychain 容器、原文或摘要版本。
+- 新增的 reasoning 元数据及 searchConsent 均为 optional。旧共享 externalConsent 在首次加载时复制为独立搜索授权，后续摘要开关不再影响搜索；明确拒绝搜索不会被摘要授权重新开启。不改数据库键、历史格式、Keychain 容器、原文或摘要版本。
 - 不变更版本 1.2.0/build8、Bundle ID com.akisenn.akichat、iOS 14.0 最低要求。按仓库交付硬规则直接使用 GitHub App 提交默认分支及运行 Actions；不创建 PR、tag 或正式 Release。
 
 ## 验证范围

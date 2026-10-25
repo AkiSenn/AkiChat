@@ -74,6 +74,8 @@ final class AppStore: ObservableObject {
             catalogs = try db.load("catalogs.v2", as: [ModelCatalog].self) ?? []
             settings = try db.load("settings.v1", as: AppSettings.self) ?? AppSettings()
             if settings.advanced == nil { settings.options = settings.options }
+            // Snapshot the former shared consent once; summary changes must never re-authorize search.
+            if settings.options.searchConsent == nil { settings.options.searchConsent = settings.options.externalConsent }
             conversations = try db.load("conversations.v1", as: [Conversation].self) ?? []
             for i in conversations.indices {
                 for j in conversations[i].messages.indices where conversations[i].messages[j].state == .generating {

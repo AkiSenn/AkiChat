@@ -68,6 +68,8 @@ final class FeaturePanelTests: XCTestCase {
         var settings = AppSettings(); settings.options = try JSONDecoder().decode(GlobalOptions.self, from: JSONSerialization.data(withJSONObject: raw))
         try db.save(settings, key: "settings.v1")
         let legacy = AppStore(database: db); XCTAssertTrue(legacy.searchConsent)
+        legacy.updateGlobalOption(\.externalConsent, false); XCTAssertTrue(legacy.searchConsent)
+        legacy.updateGlobalOption(\.externalConsent, true)
         legacy.updateGlobalOption(\.searchConsent, Optional(false)); flush(legacy)
         let updated = AppStore(database: db)
         XCTAssertFalse(updated.searchConsent); XCTAssertTrue(updated.settings.options.externalConsent)
