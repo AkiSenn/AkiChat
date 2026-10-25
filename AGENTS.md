@@ -2,7 +2,7 @@
 
 - Creator & Maintainer: AkiSenn. AI-assisted development: OpenAI Codex.
 - Ship Swift 5, native SwiftUI/UIKit, iOS 14.0 minimum, arm64 device builds. Never raise the target to fix a build.
-- Stable V2 bundle identifier: `com.akisenn.akichat`. V1 used a different container; document JSON migration instead of claiming automatic container/keychain migration.
+- AkiChat continues the v1 release line; current version is 1.2.0, not a rebuilt V2 app. Stable bundle identifier: `com.akisenn.akichat`. Early packages used `app.akichat.ios`; identify migration needs by installed bundle identifier, not v1/v2 labels. Document JSON migration between different containers; never claim automatic container/keychain migration. Keep internal archive/schema keys unchanged.
 - Keep API, models, persistence, context, tools/search and UI separate. Use URLSessionDataDelegate for streaming; preserve split UTF-8 and throttle UI updates.
 - Store credentials only in Keychain. No telemetry, embedded secrets, TLS bypasses, or credential logging. External data is untrusted. Tools are allowlisted and have bounded execution/cancellation; no shell, arbitrary code, files or private data tools.
 - Preserve backward decoding of V1 archives; never delete raw history when trimming or compressing request context. Summary replacement must be transactional and reversible.

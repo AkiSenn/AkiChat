@@ -140,7 +140,20 @@ jobs:
           TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
+          BUILT_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/device/Build/Products/Release-iphoneos/AkiChat.app/Info.plist)
+          test "$TAG" = "v$BUILT_VERSION"
           if ! gh release view "$TAG" > /dev/null 2>&1; then
-            gh release create "$TAG" --title "AkiChat $TAG" --notes-file docs/RELEASE_NOTES.md
+            gh release create "$TAG" --verify-tag --target "$GITHUB_SHA" --draft --title "AkiChat $TAG" --notes-file docs/RELEASE_NOTES.md
           fi
           gh release upload "$TAG" build/AkiChat-iOS14-unsigned.ipa build/AkiChat-iOS14-adhoc.ipa build/SHA256SUMS.txt --clobber
+          gh release edit "$TAG" --draft=false --title "AkiChat $TAG" --notes-file docs/RELEASE_NOTES.md
+          if [ "$TAG" = 'v1.2.0' ]; then
+            # Maintainer-authorized correction from the mistaken 2.x release naming.
+            gh release edit "$TAG" --latest
+            if gh release view 'v2.0.2' > /dev/null 2>&1; then
+              gh release edit 'v2.0.2' --draft=true
+              test "$(gh release view 'v2.0.2' --json isDraft --jq .isDraft)" = 'true'
+            else
+              echo 'v2.0.2 release not found; no old release or tag was recreated.'
+            fi
+          fi
