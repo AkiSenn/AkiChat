@@ -34,6 +34,7 @@ final class ComposerTextView: UITextView {
     var onHeight: ((CGFloat) -> Void)?
     private var measuredWidth: CGFloat = 0
     private var revision = 0
+    private lazy var heightProbe = ComposerHeightProbe()
     override func layoutSubviews() {
         super.layoutSubviews()
         if abs(bounds.width - measuredWidth) > 0.5 { measureHeight() }
@@ -42,8 +43,35 @@ final class ComposerTextView: UITextView {
         guard bounds.width > 1 else { return }
         measuredWidth = bounds.width; revision += 1
         let current = revision
-        let height = min(140, max(42, ceil(sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height)))
+        let height = fittingComposerHeight()
         DispatchQueue.main.async { [weak self] in if self?.revision == current { self?.onHeight?(height) } }
+    }
+    func fittingComposerHeight() -> CGFloat {
+        // Keep the native short-input path. For long drafts, establish overflow
+        // using a finite container instead of laying out the entire document.
+        if ((text ?? "") as NSString).length > 512, let content = attributedText,
+           heightProbe.overflows(content, width: bounds.width, insets: textContainerInset,
+                                 padding: textContainer.lineFragmentPadding) { return 140 }
+        return min(140, max(42, ceil(sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height)))
+    }
+}
+
+private final class ComposerHeightProbe {
+    private let storage = NSTextStorage()
+    private let manager = NSLayoutManager()
+    private let container = NSTextContainer(size: .zero)
+    init() { storage.addLayoutManager(manager); manager.addTextContainer(container) }
+    func overflows(_ content: NSAttributedString, width: CGFloat, insets: UIEdgeInsets, padding: CGFloat) -> Bool {
+        // Separate measurement storage preserves the editor's native TextKit engine,
+        // selection and marked text. Never access UITextView.layoutManager here.
+        storage.setAttributedString(content)
+        container.lineFragmentPadding = padding
+        container.size = CGSize(width: max(1, width - insets.left - insets.right),
+                                height: max(1, 140 - insets.top - insets.bottom))
+        manager.ensureLayout(for: container)
+        let glyphs = manager.glyphRange(for: container)
+        let characters = manager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+        return NSMaxRange(characters) < storage.length
     }
 }
 struct ShareFile: Identifiable {
