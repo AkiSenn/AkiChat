@@ -4,8 +4,10 @@ struct ModelsView: View {
     @EnvironmentObject var store: AppStore
     let providerID: UUID
     var selecting = false
+    var choosingDefault = false
     var onSelect: (() -> Void)?
     @State private var query = ""
+    @State private var selectionError = ""
     @State private var editing: ModelRecord?
     @State private var deleting: ModelRecord?
     var sorted: [ModelRecord] {
@@ -14,9 +16,14 @@ struct ModelsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
+                if choosingDefault {
+                    Text("API 已保存。选择一个默认模型后即可开始聊天，也可稍后从首页顶部切换。获取模型列表不会发送聊天请求，不代表所列模型均已通过聊天验证。").font(.subheadline).foregroundColor(.secondary)
+                }
+                if store.refreshingModels.contains(providerID) { ProgressView("正在获取模型…") }
+                if !selectionError.isEmpty { Text(selectionError).foregroundColor(.red) }
                 TextField("搜索模型名称或 ID", text: $query).padding(14).background(Theme.card).cornerRadius(14)
                 HStack {
-                    Button(store.refreshingModels.contains(providerID) ? "取消刷新" : "刷新 /models") {
+                    Button(store.refreshingModels.contains(providerID) ? "取消刷新" : "重新获取模型") {
                         if store.refreshingModels.contains(providerID) { store.cancelModelRefresh(providerID) } else { store.refreshModels(providerID) }
                     }.frame(minHeight: 44)
                     Spacer()
@@ -25,12 +32,21 @@ struct ModelsView: View {
                 if let date = store.catalogs.first(where: { $0.id == providerID })?.syncedAt {
                     HStack { Text("上次同步"); Text(date, style: .date); Text(date, style: .time) }.font(.caption).foregroundColor(.secondary)
                 } else { Text("尚未同步；接口不可用时仍可使用本地模型。").font(.caption).foregroundColor(.secondary) }
-                if let error = store.modelErrors[providerID] { Text(error).font(.footnote).foregroundColor(.red) }
+                if let issue = store.modelIssues[providerID] { Text(issue.message).font(.footnote).foregroundColor(issue.kind == .unsupported ? .secondary : .red).accessibilityIdentifier("model-discovery-issue") }
+                if sorted.isEmpty && !store.refreshingModels.contains(providerID) {
+                    Text("暂无模型。可以重新获取，或点击“手动添加”填写服务商提供的模型 ID；手动模型与自动获取的模型可以共存。").font(.footnote).foregroundColor(.secondary)
+                }
                 ForEach(sorted) { model in
                     Card {
                         HStack(alignment: .top) {
                             Button {
-                                if selecting { store.selectModel(providerID: providerID, modelID: model.id); onSelect?() } else { editing = model }
+                                if selecting {
+                                    do {
+                                        if choosingDefault { try store.chooseDefaultModel(providerID: providerID, modelID: model.id) }
+                                        else { store.selectModel(providerID: providerID, modelID: model.id) }
+                                        onSelect?()
+                                    } catch { selectionError = error.localizedDescription }
+                                } else { editing = model }
                             } label: {
                                 VStack(alignment: .leading, spacing: 7) {
                                     Text(model.name).font(.headline).foregroundColor(.primary)
@@ -38,7 +54,7 @@ struct ModelsView: View {
                                     Text((model.contextWindowOverride ?? model.contextWindow).map { "上下文 \($0) tokens" } ?? "上下文容量未声明，可手动覆盖")
                                         .font(.caption2).foregroundColor(.secondary)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
-                            }.disabled(store.isGenerating && selecting)
+                            }.disabled(store.isGenerating && selecting).accessibilityIdentifier("setup-model-" + model.id)
                             Button { var m = model; m.favorite.toggle(); store.saveModel(m, providerID: providerID) } label: {
                                 Image(systemName: model.favorite ? "star.fill" : "star").frame(width: 44, height: 44)
                             }.accessibilityLabel(model.favorite ? "取消收藏" : "收藏模型")
@@ -69,7 +85,7 @@ struct ModelEditor: View {
             ScrollView {
                 VStack(spacing: 16) {
                     Card {
-                        TextField("模型 ID", text: $model.id).autocapitalization(.none).disableAutocorrection(true).disabled(!model.manual)
+                        TextField("模型 ID", text: $model.id).autocapitalization(.none).disableAutocorrection(true).disabled(!model.manual).accessibilityIdentifier("manual-model-id")
                         TextField("显示名称", text: $model.name)
                         Stepper("排序权重：\(model.order)", value: $model.order, in: -100...100)
                         Toggle("收藏", isOn: $model.favorite)

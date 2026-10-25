@@ -32,6 +32,24 @@ final class InteractionTests: XCTestCase {
         XCTAssertTrue(app.buttons["model-selector"].exists)
         capture(app, name: "empty-after-switch-keyboard-drawer")
     }
+    func testWelcomeOpensProvidersAndSimpleAddFormDirectly() {
+        let app = launch(0)
+        app.buttons["configure-api"].tap()
+        XCTAssertTrue(app.navigationBars["API 服务商"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["按你的节奏"].exists)
+        let add = app.buttons["add-api-provider"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5)); add.tap()
+        XCTAssertTrue(app.textFields["provider-name"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["provider-url"].exists)
+        XCTAssertTrue(app.secureTextFields["provider-key"].exists)
+        XCTAssertTrue(app.buttons["save-discover-models"].exists)
+        XCTAssertFalse(app.textFields["默认模型 ID（可选）"].exists)
+        XCTAssertFalse(app.textFields["默认模型显示名称（可选）"].exists)
+        capture(app, name: "stage-a-simple-api-form")
+        app.buttons["取消"].tap()
+        app.buttons["完成"].tap()
+        XCTAssertTrue(app.buttons["model-selector"].exists)
+    }
     func testHundredMessageScrollAndModelPanel() {
         let app = launch(100)
         app.scrollViews.firstMatch.swipeDown()

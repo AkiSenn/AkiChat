@@ -16,7 +16,7 @@ struct ModelSelectionPanel: View {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     TextField("搜索模型或服务商", text: $query).padding(14).background(Theme.card).cornerRadius(14).accessibilityIdentifier("model-search")
                     Toggle("只看收藏", isOn: $favoritesOnly).font(.subheadline)
-                    NavigationLink("服务商与 API Key 管理", destination: ProvidersView().environmentObject(store)).frame(minHeight: 44)
+                    NavigationLink("服务商与 API Key 管理", destination: ProvidersView(onConfigured: dismiss).environmentObject(store)).frame(minHeight: 44)
                     if store.isGenerating { Text("请先停止生成，再切换模型。").font(.caption).foregroundColor(.orange) }
                     ForEach(matchingProviders) { provider in
                         ProviderModelSection(provider: provider, query: query, favoritesOnly: favoritesOnly, dismiss: dismiss)
